@@ -27,13 +27,14 @@ export function LogoutButton({ className, label = 'Log out' }: { className?: str
     <button
       onClick={logout}
       disabled={loading}
+      aria-label={label || 'Log out'}
       className={cn(
         'inline-flex min-h-[40px] items-center gap-2 rounded-input border border-border bg-card px-3 text-sm font-medium text-text-secondary transition-colors hover:border-border-hover hover:text-text-primary',
         className,
       )}
     >
       {loading ? <Spinner className="h-4 w-4" /> : <LogOut size={16} />}
-      <span>{label}</span>
+      {label && <span>{label}</span>}
     </button>
   )
 }

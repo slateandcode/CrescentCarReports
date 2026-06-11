@@ -32,7 +32,7 @@ export function ExteriorPaintEditor({
               className="flex flex-col gap-1.5 rounded-input border border-border bg-surface p-2.5 xs:flex-row xs:items-center xs:justify-between"
             >
               <span className="text-sm font-medium text-text-primary">{panel.label}</span>
-              <div className="grid grid-cols-4 gap-1 xs:flex">
+              <div className="grid grid-cols-4 gap-1.5 xs:flex">
                 {PAINT_OPTIONS.map((opt) => {
                   const active = current === opt
                   return (
@@ -42,7 +42,7 @@ export function ExteriorPaintEditor({
                       onClick={() => onChange(panel.id, opt)}
                       style={active ? { backgroundColor: PAINT_HEX[opt], borderColor: PAINT_HEX[opt] } : undefined}
                       className={cn(
-                        'min-h-[34px] rounded-input border px-2 text-xs font-semibold transition-colors',
+                        'min-h-[40px] rounded-input border px-2 text-xs font-semibold transition-colors',
                         active
                           ? 'text-black'
                           : 'border-border bg-card text-text-secondary hover:border-border-hover',

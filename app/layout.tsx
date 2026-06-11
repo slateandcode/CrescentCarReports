@@ -14,7 +14,9 @@ export const viewport: Viewport = {
   themeColor: '#0A0A0A',
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
+  // Pinch-zoom intentionally left enabled — inspectors need to zoom into VINs,
+  // plates and fine print in the field. (Inputs are forced to 16px on mobile in
+  // globals.css, so there's no iOS zoom-on-focus to suppress.)
 }
 
 export const metadata: Metadata = {

@@ -163,6 +163,28 @@
   }
 }
 
+/* ── Mobile (phone) refinements ─────────────────────────────────────────
+   Two screen-only rules that make the app usable on a 360–390px phone. */
+@media screen and (max-width: 640px) {
+  /* Force every typed control to 16px so iOS Safari never zooms the page on
+     focus. Some controls use a smaller text utility for compactness; this wins
+     over it without having to touch each one. Reduce padding, not font size,
+     if a tighter look is needed. */
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  /* Fit the fixed 210mm A4 document to the viewport so the preview is readable
+     without horizontal scrolling. Pinch-zoom (enabled app-wide) covers fine
+     detail. `zoom` (not transform) so the layout box shrinks with it. Never
+     applied to print — the @media print block below keeps the PDF true A4. */
+  .report-doc {
+    zoom: 0.46;
+  }
+}
+
 @media print {
   /* Explicit mm size is honoured more reliably than the `A4` keyword across
      browsers, and margin:0 lets the dark cover bleed to the sheet edge. */

@@ -58,7 +58,7 @@ function NavTab({
     <Link
       href={href}
       className={cn(
-        'flex flex-col items-center gap-1 py-2 text-[11px] font-medium transition-colors',
+        'flex min-h-[48px] flex-col items-center justify-center gap-1 py-2 text-[11px] font-medium transition-colors',
         active ? 'text-accent' : 'text-text-muted hover:text-text-secondary',
       )}
     >

@@ -30,20 +30,20 @@ export default async function DashboardPage() {
           <p className="text-sm text-text-secondary">Welcome back,</p>
           <h1 className="text-display-sm text-text-primary">{firstName}</h1>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {isAdmin && (
             <Link href="/bookings" className="btn-secondary">
               <CalendarDays size={18} />
-              Bookings
+              <span className="hidden sm:inline">Bookings</span>
             </Link>
           )}
           <Link href="/reports" className="btn-secondary">
             <FileText size={18} />
-            View Reports
+            <span className="hidden sm:inline">View Reports</span>
           </Link>
           <Link href="/reports/new" className="btn-primary">
             <Plus size={18} />
-            New Report
+            <span className="hidden sm:inline">New Report</span>
           </Link>
         </div>
       </div>

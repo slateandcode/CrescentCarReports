@@ -10,7 +10,7 @@ const CARDS = [
 /** Booking summary stat cards — mirrors the reports DashboardStats look. */
 export function BookingStatsCards({ stats }: { stats: BookingStats }) {
   return (
-    <div className="grid grid-cols-3 gap-3">
+    <div className="grid grid-cols-1 gap-3 xs:grid-cols-3">
       {CARDS.map(({ key, label, icon: Icon, tone }) => (
         <div key={key} className="card-base p-4">
           <Icon size={18} className={tone} />

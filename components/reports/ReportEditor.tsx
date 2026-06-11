@@ -241,7 +241,7 @@ export function ReportEditor({
           defaultOpen
         >
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <p className="label-base">Package</p>
                 <p className="rounded-input border border-border bg-surface px-3 py-2.5 text-sm font-semibold text-accent">
@@ -256,7 +256,7 @@ export function ReportEditor({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 xs:grid-cols-2">
               <TextField
                 label="Inspection date"
                 type="date"

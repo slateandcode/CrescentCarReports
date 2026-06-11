@@ -89,10 +89,10 @@ export function PhotoUploader({
             <button
               type="button"
               onClick={() => remove(p)}
-              className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-white opacity-90 transition-opacity hover:bg-fail"
+              className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-white opacity-90 transition-opacity hover:bg-fail"
               aria-label="Remove photo"
             >
-              <X size={14} />
+              <X size={15} />
             </button>
           </div>
         ))}

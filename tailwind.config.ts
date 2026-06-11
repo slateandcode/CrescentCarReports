@@ -15,7 +15,10 @@ const config: Config = {
   theme: {
     extend: {
       screens: {
-        xs: '420px',
+        // A true phone breakpoint. Was 420px, which sits ABOVE the 360–390px
+        // iPhones inspectors actually use, so xs:-gated UI (issue tally, section
+        // status badge, paint options) was hidden/cramped on real phones.
+        xs: '360px',
       },
       colors: {
         background: '#0A0A0A',

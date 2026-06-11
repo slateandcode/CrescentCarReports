@@ -26,6 +26,8 @@ export function TopBar({ profile }: { profile: InspectorProfile }) {
             <p className="text-xs capitalize leading-tight text-text-muted">{profile.role}</p>
           </div>
           <LogoutButton className="hidden sm:inline-flex" />
+          {/* Icon-only logout for phones (the name/role + full button are sm+ only). */}
+          <LogoutButton label="" className="w-11 justify-center sm:hidden" />
         </div>
       </div>
     </header>

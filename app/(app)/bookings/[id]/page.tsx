@@ -63,7 +63,7 @@ export default async function BookingDetailPage({
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="font-mono text-sm font-semibold text-accent">{b.id}</p>
+          <p className="font-mono text-sm font-semibold text-accent break-all">{b.id}</p>
           <h1 className="mt-1 text-display-sm text-text-primary">{vehicle}</h1>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <BookingStatusBadge status={b.booking_status} />

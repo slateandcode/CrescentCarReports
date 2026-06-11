@@ -39,12 +39,12 @@ export function BookingFilters() {
         ))}
       </div>
 
-      <div className="ml-auto flex items-center gap-2">
+      <div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
         <input
           type="date"
           value={from}
           onChange={(e) => update({ from: e.target.value })}
-          className="input-base h-10 w-auto min-h-0 py-1.5 text-sm"
+          className="input-base h-11 flex-1 py-1.5 text-sm sm:h-10 sm:min-h-0 sm:w-auto sm:flex-none"
           aria-label="From date"
         />
         <span className="text-sm text-text-muted">–</span>
@@ -52,7 +52,7 @@ export function BookingFilters() {
           type="date"
           value={to}
           onChange={(e) => update({ to: e.target.value })}
-          className="input-base h-10 w-auto min-h-0 py-1.5 text-sm"
+          className="input-base h-11 flex-1 py-1.5 text-sm sm:h-10 sm:min-h-0 sm:w-auto sm:flex-none"
           aria-label="To date"
         />
       </div>

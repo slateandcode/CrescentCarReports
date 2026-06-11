@@ -20,7 +20,7 @@ export default async function PreviewPage({ params }: { params: Promise<{ id: st
     <div>
       {/* Toolbar — hidden in print */}
       <div className="no-print mb-4">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <Link
               href={`/reports/${id}/edit`}
@@ -30,11 +30,11 @@ export default async function PreviewPage({ params }: { params: Promise<{ id: st
             </Link>
             <span className="font-mono text-sm font-semibold text-accent">{report.report_reference}</span>
           </div>
-          <div className="flex gap-2">
-            <Link href={`/reports/${id}/edit`} className="btn-secondary h-10 text-sm">
+          <div className="flex w-full gap-2 sm:w-auto">
+            <Link href={`/reports/${id}/edit`} className="btn-secondary h-11 flex-1 text-sm sm:flex-none">
               <Pencil size={15} /> Edit
             </Link>
-            <PrintButton reportId={id} reference={report.report_reference} className="btn-primary h-10 text-sm" />
+            <PrintButton reportId={id} reference={report.report_reference} className="btn-primary h-11 flex-1 text-sm sm:flex-none" />
           </div>
         </div>
         {/* Guidance — the Download button is the reliable path; print is fallback. */}

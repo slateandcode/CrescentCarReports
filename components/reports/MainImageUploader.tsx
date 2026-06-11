@@ -83,7 +83,7 @@ export function MainImageUploader({
           onClick={() => inputRef.current?.click()}
           disabled={busy || IS_DEMO}
           title={IS_DEMO ? 'Connect Supabase to upload photos' : undefined}
-          className="btn-secondary h-10 flex-1 text-sm"
+          className="btn-secondary h-11 flex-1 text-sm"
         >
           {url ? <RefreshCw size={15} /> : <Camera size={15} />}
           {url ? 'Change photo' : 'Add vehicle photo'}
@@ -96,14 +96,14 @@ export function MainImageUploader({
               setAdjusting(true)
             }}
             disabled={busy}
-            className="btn-secondary h-10 text-sm"
+            className="btn-secondary h-11 w-11 shrink-0 px-0"
             title="Rotate the photo"
           >
             <RotateCw size={15} />
           </button>
         )}
         {url && !IS_DEMO && (
-          <button type="button" onClick={remove} disabled={busy} className="btn-danger h-10 text-sm">
+          <button type="button" onClick={remove} disabled={busy} className="btn-danger h-11 w-11 shrink-0 px-0">
             <Trash2 size={15} />
           </button>
         )}

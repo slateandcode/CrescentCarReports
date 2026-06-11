@@ -68,7 +68,7 @@ export default async function SettingsPage() {
                     <li key={inv.id} className="flex items-center gap-3 py-2.5 text-sm">
                       <Mail size={15} className="text-text-muted" />
                       <span className="min-w-0 flex-1 truncate text-text-primary">{inv.email}</span>
-                      <span className="capitalize text-text-muted">{inv.role}</span>
+                      <span className="hidden capitalize text-text-muted sm:inline">{inv.role}</span>
                       <span
                         className={
                           state === 'Used'
