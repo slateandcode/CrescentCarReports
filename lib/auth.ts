@@ -40,6 +40,9 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
     .maybeSingle()
 
   if (!profile) return null
+  // A suspended ("kicked") member loses all access — treat them as signed out so
+  // every protected page redirects them to /login.
+  if ((profile as InspectorProfile).status === 'suspended') return null
   return { id: userId, email: claims.email ?? profile.email, profile: profile as InspectorProfile }
 })
 

@@ -60,6 +60,51 @@ export async function createInvite(formData: FormData): Promise<InviteResult> {
   return { ok: true, url, email }
 }
 
+/**
+ * Admin-only: suspend ("kick") or reactivate a team member. A suspended member
+ * loses all access immediately — getSessionUser() blocks them and is_admin()
+ * returns false — and is also banned in Supabase Auth so they can't sign back
+ * in. Reversible. You can't change your own status (no self-lockout).
+ */
+export async function setMemberStatus(
+  memberId: string,
+  status: 'active' | 'suspended',
+): Promise<{ ok: boolean; error?: string }> {
+  if (IS_DEMO) return { ok: false, error: 'Preview mode — connect Supabase to manage members.' }
+  const session = await getSessionUser()
+  if (!session || session.profile.role !== 'admin') {
+    return { ok: false, error: 'Only admins can manage team members.' }
+  }
+  if (memberId === session.id) {
+    return { ok: false, error: "You can't change your own access." }
+  }
+  if (status !== 'active' && status !== 'suspended') {
+    return { ok: false, error: 'Invalid status.' }
+  }
+  if (!isServiceConfigured()) {
+    return { ok: false, error: 'Server is not configured to manage members.' }
+  }
+
+  const service = createServiceClient()
+  const { error } = await service.from('inspector_profiles').update({ status }).eq('id', memberId)
+  if (error) return { ok: false, error: error.message }
+
+  // Best-effort: ban/unban the auth user so a kicked member can't sign back in.
+  // The profile flag + getSessionUser block already revoke app access, so a
+  // failure here is non-fatal.
+  try {
+    await service.auth.admin.updateUserById(memberId, {
+      ban_duration: status === 'suspended' ? '876000h' : 'none',
+    })
+  } catch {
+    /* non-fatal */
+  }
+
+  revalidatePath('/settings')
+  revalidatePath(`/settings/members/${memberId}`)
+  return { ok: true }
+}
+
 /** Update the signed-in user's own profile (name + phone). */
 export async function updateMyProfile(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   if (IS_DEMO) return { ok: false, error: 'Preview mode — connect Supabase to save your profile.' }

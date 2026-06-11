@@ -205,6 +205,19 @@ export async function getDaySchedule(date: string): Promise<DaySlot[]> {
   })
 }
 
+/** All bookings assigned to one inspector — admin views a member's job history. */
+export async function getInspectorBookings(inspectorId: string): Promise<BookingWithInspector[]> {
+  if (IS_DEMO) return []
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('bookings')
+    .select(WITH_INSPECTOR)
+    .eq('assigned_inspector', inspectorId)
+    .order('inspection_date', { ascending: false })
+    .limit(50)
+  return (data as BookingWithInspector[]) || []
+}
+
 /** Active inspectors for assignment dropdowns (admin UI). */
 export async function getActiveInspectors(): Promise<{ id: string; full_name: string }[]> {
   if (IS_DEMO) return []

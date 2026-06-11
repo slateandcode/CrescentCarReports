@@ -7,6 +7,7 @@ import { IS_DEMO } from '@/lib/env'
 import { LogoutButton } from '@/components/auth/LogoutButton'
 import { ProfileForm } from '@/components/settings/ProfileForm'
 import { InviteForm } from '@/components/settings/InviteForm'
+import { TeamMembers } from '@/components/settings/TeamMembers'
 
 export const metadata = { title: 'Settings' }
 export const dynamic = 'force-dynamic'
@@ -88,6 +89,8 @@ export default async function SettingsPage() {
           )}
         </section>
       )}
+
+      {isAdmin && <TeamMembers currentUserId={profile.id} />}
 
       <p className="text-center text-xs text-text-muted">
         Member since {format(new Date(profile.created_at), 'MMMM yyyy')} · Crescent Car Reports by Crescent Car Check
