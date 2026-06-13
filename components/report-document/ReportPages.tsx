@@ -325,7 +325,7 @@ export function ReportCoverPage({ report, template }: { report: InspectionReport
             fill
             sizes="460px"
             className="object-contain"
-            style={{ opacity: 0.2, filter: 'blur(1.5px)' }}
+            style={{ opacity: 0.2, filter: 'blur(1px)' }}
           />
         </div>
 
@@ -350,7 +350,7 @@ export function ReportCoverPage({ report, template }: { report: InspectionReport
             sizes="700px"
             priority
             className="object-contain"
-            style={{ filter: 'brightness(0.55) saturate(0.85) contrast(1.15) blur(7px)' }}
+            style={{ filter: 'brightness(0.55) saturate(0.85) contrast(1.15) blur(4px)' }}
           />
           <Image
             src="/cover-car.png"
