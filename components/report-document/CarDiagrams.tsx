@@ -85,7 +85,18 @@ const PANEL_FILL: Record<PaintCondition, string> = {
  *  map doesn't claim unchecked panels were verified original. */
 const PANEL_NEUTRAL = 'rgba(148,163,184,0.22)'
 
-function ExteriorViewSvg({ view, paint, flipX }: { view: ExteriorView; paint: PaintMap; flipX?: boolean }) {
+function ExteriorViewSvg({
+  view,
+  paint,
+  flipX,
+  svgClassName = 'h-auto w-full',
+}: {
+  view: ExteriorView
+  paint: PaintMap
+  flipX?: boolean
+  /** Override sizing — the report caps height so both views fit one A4 sheet. */
+  svgClassName?: string
+}) {
   const width = Number(view.viewBox.split(' ')[2])
   const content = (
     <>
@@ -100,7 +111,7 @@ function ExteriorViewSvg({ view, paint, flipX }: { view: ExteriorView; paint: Pa
     </>
   )
   return (
-    <svg viewBox={view.viewBox} className="h-auto w-full" role="img">
+    <svg viewBox={view.viewBox} className={svgClassName} role="img">
       {/* flipX mirrors the view so its front points the same way as the side view */}
       {flipX ? <g transform={`translate(${width},0) scale(-1,1)`}>{content}</g> : content}
     </svg>
@@ -116,15 +127,19 @@ function ViewFrame({ label, children }: { label: string; children: ReactNode }) 
   )
 }
 
-/** Colour-coded exterior paint map — side profile + top-down. */
+/** Colour-coded exterior paint map — side profile + top-down.
+ *  Both profiles are very wide and short, so we cap their height (rather than
+ *  letting them fill the full document width) to keep the whole exterior page on
+ *  a single A4 sheet — otherwise the paint-condition list orphans onto page 2. */
 export function ExteriorBodyMap({ paint }: { paint: PaintMap }) {
+  const viewCls = 'h-[112px] w-auto max-w-full'
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-2.5">
+    <div className="mx-auto flex max-w-2xl flex-col gap-2">
       <ViewFrame label="Side">
-        <ExteriorViewSvg view={SIDE_ART} paint={paint} />
+        <ExteriorViewSvg view={SIDE_ART} paint={paint} svgClassName={viewCls} />
       </ViewFrame>
       <ViewFrame label="Top">
-        <ExteriorViewSvg view={TOP_ART} paint={paint} flipX />
+        <ExteriorViewSvg view={TOP_ART} paint={paint} flipX svgClassName={viewCls} />
       </ViewFrame>
     </div>
   )
