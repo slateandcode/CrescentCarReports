@@ -7,9 +7,11 @@ import {
   CheckCircle2,
   Gauge,
   Calendar,
+  CalendarDays,
   Clock,
   MapPin,
   Hash,
+  FileText,
   Fuel,
   Cog,
   Globe,
@@ -64,7 +66,7 @@ import {
 import { HealthGauge } from './ReportDonutChart'
 import {
   WheelLayout,
-  BodyPaintView,
+  ExteriorBodyMap,
   DiagramLegend,
   PaintLegend,
   type CornerStatuses,
@@ -287,68 +289,186 @@ function PassEvidenceCard({ title, state }: { title: string; state: ChecklistIte
 // Page 1: Cover
 // ════════════════════════════════════════════════════════════════════════
 export function ReportCoverPage({ report, template }: { report: InspectionReport; template: ResolvedTemplate }) {
-  const date = report.inspection_date ? format(new Date(report.inspection_date), 'd MMMM yyyy') : null
-  const hasPhoto = Boolean(report.main_vehicle_image_url)
+  const date = report.inspection_date ? format(new Date(report.inspection_date), 'd MMM yyyy') : null
   const score = overallScore(report.package_type, report.checklist || {})
-  const rec = normalizeRecommendation(report.buyer_recommendation) ?? recommendationFromScore(score)
 
-  const subtitle = [report.regional_specs, report.transmission, report.fuel_type, report.exterior_colour]
+  const identity = [
+    [report.vehicle_year, report.vehicle_make, report.vehicle_model].filter(Boolean).join(' '),
+    report.regional_specs,
+  ]
     .filter(Boolean)
     .join('  ·  ')
 
   return (
-    <DocPage className="bg-doc-ink text-white">
+    <DocPage className="overflow-hidden text-white">
       <div className="relative flex flex-1 flex-col">
-        <div className="absolute inset-0 z-0">
-          {hasPhoto ? (
-            <>
-              <Image src={report.main_vehicle_image_url!} alt={vehicleTitle(report)} fill sizes="794px" className="object-cover" priority />
-              <div className="doc-photo-scrim absolute inset-0" />
-            </>
-          ) : (
-            <div className="doc-hero-wash absolute inset-0">
-              <span className="absolute bottom-24 right-[-90px] block h-[360px] w-[360px] opacity-[0.05]">
-                <Image src="/crescent-mark-tight.png" alt="" fill sizes="360px" className="object-contain" />
-              </span>
-            </div>
-          )}
+        {/* .report-page paints itself white with higher cascade priority than a
+            bg utility, so the dark field is its own full-bleed layer. A soft
+            vignette behind the headline keeps the black from printing flat. */}
+        <div
+          className="absolute inset-0 bg-[#0a0a0a]"
+          style={{ background: 'radial-gradient(120% 85% at 18% 42%, #151515 0%, #0a0a0a 58%)' }}
+        />
+        {/* The brand crescent — its own element behind the car: the actual mark
+            reading as the moon, with a soft ambient glow around it. */}
+        <div className="absolute left-[470px] top-[55px] h-[460px] w-[460px]">
+          <div
+            className="absolute -inset-20 rounded-full"
+            style={{
+              background:
+                'radial-gradient(circle, rgba(255,198,0,0.06) 28%, rgba(255,198,0,0.02) 52%, transparent 68%)',
+            }}
+          />
+          <Image
+            src="/crescent-mark-tight.png"
+            alt=""
+            fill
+            sizes="460px"
+            className="object-contain"
+            style={{ opacity: 0.2, filter: 'blur(1.5px)' }}
+          />
         </div>
 
-        <div className="relative z-10 px-14 pt-14">
-          <span className="relative block h-9 w-[190px]">
-            <Image src="/logo-wordmark.png" alt="Crescent Car Check" fill sizes="190px" className="object-contain object-left" />
+        {/* The car — its own element emerging from the dark. Three passes of the
+            same transparent PNG: a blurred ghost the rim dissolves into, the sharp
+            darkened body masked to the core, and a screen-blended highlight pass
+            so the running lights glow. The wrapper mask fades the whole element's
+            opacity out toward its edges. */}
+        <div
+          className="absolute right-[-276px] top-[300px] h-[490px] w-[700px]"
+          style={{
+            WebkitMaskImage:
+              'radial-gradient(78% 72% at 46% 46%, #000 52%, rgba(0,0,0,0.75) 70%, rgba(0,0,0,0.25) 88%, transparent 100%)',
+            maskImage:
+              'radial-gradient(78% 72% at 46% 46%, #000 52%, rgba(0,0,0,0.75) 70%, rgba(0,0,0,0.25) 88%, transparent 100%)',
+          }}
+        >
+          <Image
+            src="/cover-car.png"
+            alt=""
+            fill
+            sizes="700px"
+            priority
+            className="object-contain"
+            style={{ filter: 'brightness(0.55) saturate(0.85) contrast(1.15) blur(7px)' }}
+          />
+          <Image
+            src="/cover-car.png"
+            alt=""
+            fill
+            sizes="700px"
+            className="object-contain"
+            style={{
+              filter: 'brightness(0.55) saturate(0.85) contrast(1.15)',
+              WebkitMaskImage:
+                'radial-gradient(72% 66% at 46% 46%, #000 40%, rgba(0,0,0,0.55) 64%, transparent 84%)',
+              maskImage:
+                'radial-gradient(72% 66% at 46% 46%, #000 40%, rgba(0,0,0,0.55) 64%, transparent 84%)',
+            }}
+          />
+          <Image
+            src="/cover-car.png"
+            alt=""
+            fill
+            sizes="700px"
+            className="object-contain"
+            style={{
+              mixBlendMode: 'screen',
+              opacity: 0.75,
+              filter: 'brightness(0.85) contrast(1.6) saturate(0.75)',
+              WebkitMaskImage:
+                'radial-gradient(72% 66% at 46% 46%, #000 40%, rgba(0,0,0,0.55) 64%, transparent 84%)',
+              maskImage:
+                'radial-gradient(72% 66% at 46% 46%, #000 40%, rgba(0,0,0,0.55) 64%, transparent 84%)',
+            }}
+          />
+        </div>
+        {/* Ground the car: fade its lower body into the field above the stat card. */}
+        <div className="absolute right-0 top-[640px] h-[180px] w-[480px] bg-gradient-to-b from-transparent to-[#0a0a0a]" />
+
+        {/* Gold top rule — the same signature every inner page carries via DocHeader. */}
+        <div className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-accent via-accent/50 to-transparent" />
+
+        <div className="relative px-14 pt-[84px]">
+          <span className="relative block h-[64px] w-[340px]">
+            <Image src="/logo-wordmark.png" alt="Crescent Car Check" fill sizes="340px" priority className="object-contain object-left" />
           </span>
         </div>
 
-        <div className="relative z-10 mt-auto px-14 pb-14">
-          <div className="doc-rule mb-6" />
-          <p className="text-[11px] font-semibold uppercase tracking-[0.34em] text-accent">Vehicle Inspection Report</p>
-          <h1 className="mt-3 text-[42px] font-extrabold leading-[1.05] tracking-tight text-white">{vehicleTitle(report)}</h1>
-          {subtitle && <p className="mt-2 text-[13px] font-medium text-white/65">{subtitle}</p>}
+        <div className="relative mt-[170px] px-14">
+          <div className="h-[3px] w-14 rounded-full bg-accent" />
+          <p className="mt-7 text-[11.5px] font-semibold uppercase tracking-[0.42em] text-white/90">Vehicle Inspection Report</p>
+          <h1 className="mt-4 text-[64px] font-black italic uppercase leading-[1.14] tracking-tight">
+            <span className="block text-white">Inspect</span>
+            <span className="block text-accent">Before</span>
+            <span className="block text-white">You Invest.</span>
+          </h1>
+          <p className="mt-6 text-[15px] font-medium text-white/75">Buy With Confidence and Avoid Hidden Surprises!</p>
+          {identity && (
+            <p className="mt-7 text-[12px] font-bold uppercase tracking-[0.28em] text-accent">{identity}</p>
+          )}
+        </div>
 
-          <div className="mt-7 flex flex-wrap items-center gap-x-10 gap-y-4">
-            <CoverMeta label="Package" value={`${template.name} · ${template.pointLabel}`} />
-            {date && <CoverMeta label="Inspection date" value={date} />}
-            <CoverMeta label="Reference" value={report.report_reference} mono />
-            {score != null && <CoverMeta label="Crescent Score" value={`${score}/100`} />}
+        {/* Key facts + footer pinned to the bottom of the sheet. */}
+        <div className="relative mt-auto">
+          <div className="px-12">
+            {report.customer_name && (
+              <p className="mb-5 text-center text-[10px] font-semibold uppercase tracking-[0.3em] text-white/45">
+                Prepared exclusively for <span className="text-white/90">{report.customer_name}</span>
+              </p>
+            )}
+            <div className="grid auto-cols-fr grid-flow-col divide-x divide-white/10 rounded-[22px] border border-white/10 bg-white/[0.045] py-7">
+              <CoverStat icon={<ShieldCheck size={30} strokeWidth={1.6} />} label="Package" value={template.name} sub={template.pointLabel} />
+              {date && <CoverStat icon={<CalendarDays size={30} strokeWidth={1.6} />} label="Inspection date" value={date} />}
+              <CoverStat icon={<FileText size={30} strokeWidth={1.6} />} label="Reference" value={report.report_reference} />
+              {score != null && <CoverStat icon={<ScoreRing score={score} />} label="Crescent Score" value={`${score}/100`} />}
+            </div>
           </div>
 
-          {template.recommendationEnabled && rec && (
-            <div className="mt-8 flex flex-wrap items-center gap-3">
-              <RecommendationBadge recommendation={rec} />
-            </div>
-          )}
+          <div className="mt-11 flex items-center justify-between border-t border-white/10 px-14 py-7">
+            <span className="flex items-center gap-2.5 text-[13.5px] font-medium text-white/85">
+              <Globe size={17} className="text-accent" />
+              crescentcarcheck.com
+            </span>
+            <p className="text-[13.5px] font-medium text-white/85">
+              Driven by <span className="text-accent">Trust.</span> Backed by <span className="text-accent">Detail.</span>
+            </p>
+          </div>
         </div>
       </div>
     </DocPage>
   )
 }
 
-function CoverMeta({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+/** Gold arc that fills to the actual score — every cover's gauge is its own. */
+function ScoreRing({ score }: { score: number }) {
+  const r = 15.5
+  const c = 2 * Math.PI * r
+  const filled = (Math.max(0, Math.min(100, score)) / 100) * c
   return (
-    <div>
-      <p className="text-[9.5px] font-semibold uppercase tracking-[0.2em] text-white/45">{label}</p>
-      <p className={`mt-1 text-[13px] font-semibold text-white ${mono ? 'font-mono tracking-wide text-accent' : ''}`}>{value}</p>
+    <svg width={34} height={34} viewBox="0 0 36 36" className="-rotate-90">
+      <circle cx={18} cy={18} r={r} fill="none" stroke="rgba(255,255,255,0.14)" strokeWidth={3} />
+      <circle
+        cx={18}
+        cy={18}
+        r={r}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={3}
+        strokeLinecap="round"
+        strokeDasharray={`${filled} ${c - filled}`}
+      />
+    </svg>
+  )
+}
+
+function CoverStat({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: string; sub?: string }) {
+  return (
+    <div className="flex flex-col items-center px-3 text-center">
+      <span className="flex h-9 items-center text-accent">{icon}</span>
+      <p className="mt-3.5 text-[9.5px] font-bold uppercase tracking-[0.22em] text-white/55">{label}</p>
+      <p className="tnum mt-1.5 text-[16px] font-bold text-white">{value}</p>
+      {sub && <p className="mt-1 text-[11px] text-white/45">{sub}</p>}
     </div>
   )
 }
@@ -712,18 +832,19 @@ export function ReportExteriorPage({ report, index }: { report: InspectionReport
           </div>
         </div>
 
-        <div className="grid grid-cols-5 gap-8">
-          <div className="col-span-2 flex flex-col items-center">
-            <BodyPaintView paint={paintMap} />
-            <div className="mt-5 w-full">
-              <PaintLegend />
-            </div>
+        {/* Four-view, colour-coded exterior paint map (top · side · front · rear) */}
+        <div className="mb-5 rounded-xl border border-doc-border bg-doc-surface p-3.5">
+          <ExteriorBodyMap paint={paintMap} />
+          <div className="mt-3 border-t border-doc-border pt-2.5">
+            <PaintLegend />
           </div>
+        </div>
 
-          <div className="col-span-3">
+        <div className="grid grid-cols-5 gap-8">
+          <div className="col-span-2">
             <MiniHeading>Paint Condition · all panels</MiniHeading>
             {paintRows.length > 0 ? (
-              <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 rounded-xl border border-doc-border p-2.5">
+              <div className="grid grid-cols-1 gap-y-0.5 rounded-xl border border-doc-border p-2.5">
                 {paintRows.map((r) => (
                   <div key={r.label} className="flex items-center justify-between gap-2 px-1.5 py-1">
                     <span className="truncate text-[11px] font-medium text-doc-ink">{r.label}</span>
@@ -738,8 +859,10 @@ export function ReportExteriorPage({ report, index }: { report: InspectionReport
                 Paint recorded as original / not separately marked.
               </p>
             )}
+          </div>
 
-            <MiniHeading className="mt-6">Exterior Issues</MiniHeading>
+          <div className="col-span-3">
+            <MiniHeading>Exterior Issues</MiniHeading>
             {issues.length > 0 ? (
               <div className="space-y-3">
                 {issues.map((it, i) => (

@@ -13,7 +13,9 @@ interface Props {
   reportId: string
   photos: PhotoRef[]
   target: Omit<UploadTarget, 'reportId'>
-  onAdd: (photo: PhotoRef) => void
+  /** Called once with ALL newly-uploaded photos so the parent can append the
+   *  whole batch in a single update (the input allows multi-select). */
+  onAdd: (photos: PhotoRef[]) => void
   onRemove: (photo: PhotoRef) => void
   /** Replace a photo in place (rotation / fit / caption from the adjuster). */
   onUpdate?: (photo: PhotoRef) => void
@@ -45,14 +47,20 @@ export function PhotoUploader({
     if (!files || files.length === 0) return
     setBusy(true)
     setError(null)
+    // Collect every upload and append the whole batch in ONE onAdd call. Appending
+    // per-file would make each call close over the same stale parent array (await
+    // yields between iterations), so only the last photo would survive.
+    const added: PhotoRef[] = []
     try {
       for (const file of Array.from(files)) {
         const ref = await uploadPhoto(file, { reportId, ...target })
-        onAdd(ref)
+        added.push(ref)
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Upload failed.')
     } finally {
+      // Persist whatever uploaded, even if a later file in the batch failed.
+      if (added.length) onAdd(added)
       setBusy(false)
       if (inputRef.current) inputRef.current.value = ''
     }

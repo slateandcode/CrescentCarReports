@@ -34,9 +34,11 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     return demoStats()
   }
   const supabase = await createClient()
-  const startOfMonth = new Date()
-  startOfMonth.setDate(1)
-  startOfMonth.setHours(0, 0, 0, 0)
+  // Month boundary in Asia/Dubai (UTC+4, no DST), NOT server-local: Netlify runs
+  // in UTC, so a local boundary mis-buckets reports created in the first hours of
+  // the 1st (Dubai). Mirrors the timezone handling in lib/bookings-data.ts.
+  const dubaiDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dubai' }).format(new Date())
+  const startOfMonthISO = `${dubaiDate.slice(0, 7)}-01T00:00:00+04:00`
 
   const [total, draft, completed, thisMonth] = await Promise.all([
     supabase.from('inspection_reports').select('id', { count: 'exact', head: true }),
@@ -45,7 +47,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     supabase
       .from('inspection_reports')
       .select('id', { count: 'exact', head: true })
-      .gte('created_at', startOfMonth.toISOString()),
+      .gte('created_at', startOfMonthISO),
   ])
 
   return {
@@ -99,18 +101,25 @@ export async function getReports(filters: ReportFilters): Promise<InspectionRepo
     query = query.eq('package_type', filters.pkg)
   }
   if (filters.search?.trim()) {
-    const s = filters.search.trim()
-    // ilike across the searchable text columns.
-    const cols = [
-      'report_reference',
-      'customer_name',
-      'customer_phone',
-      'vehicle_make',
-      'vehicle_model',
-      'plate_number',
-      'vin',
-    ]
-    query = query.or(cols.map((c) => `${c}.ilike.%${s}%`).join(','))
+    // Strip PostgREST-reserved characters before interpolating into the .or()
+    // filter: a comma splits the condition list and parens/quotes/backslash break
+    // value parsing, so a term containing any of them (e.g. a name like
+    // "Smith, John") would otherwise 400 and the search would silently return
+    // nothing. Collapse the leftover whitespace so the ilike still matches.
+    const s = filters.search.trim().replace(/[,()"\\]/g, ' ').replace(/\s+/g, ' ').trim()
+    if (s) {
+      // ilike across the searchable text columns.
+      const cols = [
+        'report_reference',
+        'customer_name',
+        'customer_phone',
+        'vehicle_make',
+        'vehicle_model',
+        'plate_number',
+        'vin',
+      ]
+      query = query.or(cols.map((c) => `${c}.ilike.%${s}%`).join(','))
+    }
   }
 
   switch (filters.sort) {
@@ -124,7 +133,11 @@ export async function getReports(filters: ReportFilters): Promise<InspectionRepo
       query = query.order('updated_at', { ascending: false })
   }
 
-  const { data } = await query.limit(200)
+  const { data, error } = await query.limit(200)
+  if (error) {
+    console.error('[getReports] query failed', error)
+    return []
+  }
   return (data as InspectionReport[]) || []
 }
 

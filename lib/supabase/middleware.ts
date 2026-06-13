@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { IS_DEMO } from '@/lib/env'
 
 /** Routes that never require a session. */
-const PUBLIC_PREFIXES = ['/login', '/invite', '/forgot-password', '/auth']
+const PUBLIC_PREFIXES = ['/login', '/invite', '/forgot-password', '/auth', '/exterior-preview']
 
 /** Inactivity window — a session idle longer than this is force-logged-out. */
 const INACTIVITY_LIMIT_MS = 14 * 24 * 60 * 60 * 1000 // 14 days
@@ -15,6 +15,20 @@ const HEARTBEAT_INTERVAL_MS = 10 * 60 * 1000 // 10 minutes
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + '/'))
+}
+
+/**
+ * Build a redirect that CARRIES the cookies Supabase wrote onto `response`
+ * (a refreshed/rotated session, or sign-out's cleared cookies). A bare
+ * NextResponse.redirect drops them — the documented @supabase/ssr middleware
+ * pitfall — which can silently log the user out on the next request.
+ */
+function redirectWithCookies(url: URL, response: NextResponse): NextResponse {
+  const redirectRes = NextResponse.redirect(url)
+  for (const cookie of response.cookies.getAll()) {
+    redirectRes.cookies.set(cookie.name, cookie.value, cookie)
+  }
+  return redirectRes
 }
 
 /**
@@ -87,7 +101,7 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     url.searchParams.set('redirect', pathname)
-    return NextResponse.redirect(url)
+    return redirectWithCookies(url, response)
   }
 
   if (userId && !isPrefetch) {
@@ -116,7 +130,7 @@ export async function updateSession(request: NextRequest) {
         const url = request.nextUrl.clone()
         url.pathname = '/login'
         url.searchParams.set('reason', suspended ? 'suspended' : 'inactive')
-        return NextResponse.redirect(url)
+        return redirectWithCookies(url, response)
       }
 
       // Bump activity at most once per hour to avoid a write on every check.
@@ -142,7 +156,7 @@ export async function updateSession(request: NextRequest) {
       const url = request.nextUrl.clone()
       url.pathname = '/dashboard'
       url.search = ''
-      return NextResponse.redirect(url)
+      return redirectWithCookies(url, response)
     }
   }
 

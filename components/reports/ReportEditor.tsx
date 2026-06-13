@@ -59,9 +59,11 @@ type Form = Pick<
 export function ReportEditor({
   report,
   inspectorName,
+  canDelete = false,
 }: {
   report: InspectionReport
   inspectorName: string
+  canDelete?: boolean
 }) {
   const template = useMemo(() => getTemplate(report.package_type), [report.package_type])
 
@@ -434,7 +436,7 @@ export function ReportEditor({
             reportId={report.id}
             photos={form.photos}
             target={{ sectionId: 'general' }}
-            onAdd={(photo) => patch({ photos: [...form.photos, photo] })}
+            onAdd={(newPhotos) => setForm((prev) => ({ ...prev, photos: [...prev.photos, ...newPhotos] }))}
             onRemove={(photo) => patch({ photos: form.photos.filter((p) => p.id !== photo.id) })}
             onUpdate={(photo) => patch({ photos: form.photos.map((p) => (p.id === photo.id ? photo : p)) })}
             label="Add photo"
@@ -495,16 +497,18 @@ export function ReportEditor({
           </div>
         )}
 
-        {/* Danger zone */}
-        <div className="mt-2 flex flex-col gap-3 rounded-card border border-fail/20 bg-fail-muted/40 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold text-text-primary">Delete report</p>
-            <p className="mt-0.5 text-xs text-text-secondary">
-              Permanently removes this report and renumbers the rest to close the gap.
-            </p>
+        {/* Danger zone — admin only (deletion renumbers everyone's references). */}
+        {canDelete && (
+          <div className="mt-2 flex flex-col gap-3 rounded-card border border-fail/20 bg-fail-muted/40 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-text-primary">Delete report</p>
+              <p className="mt-0.5 text-xs text-text-secondary">
+                Permanently removes this report and renumbers the rest to close the gap.
+              </p>
+            </div>
+            <DeleteReportButton id={report.id} reference={report.report_reference} variant="editor" />
           </div>
-          <DeleteReportButton id={report.id} reference={report.report_reference} variant="editor" />
-        </div>
+        )}
       </div>
 
       <StickyReportActions

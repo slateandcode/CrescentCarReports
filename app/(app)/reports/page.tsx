@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { Plus, FileSearch } from 'lucide-react'
+import { requireUser } from '@/lib/auth'
 import { getReports, type ReportFilters as Filters } from '@/lib/data'
 import { ReportFilters } from '@/components/reports/ReportFilters'
 import { ReportCard } from '@/components/reports/ReportCard'
@@ -12,6 +13,8 @@ export default async function ReportsPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
+  const { profile } = await requireUser()
+  const canDelete = profile.role === 'admin'
   const sp = await searchParams
   const filters: Filters = {
     search: sp.search,
@@ -59,7 +62,7 @@ export default async function ReportsPage({
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {reports.map((r) => (
-            <ReportCard key={r.id} report={r} />
+            <ReportCard key={r.id} report={r} canDelete={canDelete} />
           ))}
         </div>
       )}

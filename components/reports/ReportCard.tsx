@@ -6,7 +6,13 @@ import { vehicleTitle } from '@/lib/report-utils'
 import { ReportStatusBadge, PackageBadge } from '@/components/ui/Badge'
 import { DeleteReportButton } from './DeleteReportButton'
 
-export function ReportCard({ report }: { report: InspectionReport }) {
+export function ReportCard({
+  report,
+  canDelete = false,
+}: {
+  report: InspectionReport
+  canDelete?: boolean
+}) {
   const updated = report.updated_at ? format(new Date(report.updated_at), 'd MMM yyyy') : ''
   return (
     <div className="card-base p-4 transition-colors hover:border-border-hover">
@@ -51,7 +57,9 @@ export function ReportCard({ report }: { report: InspectionReport }) {
           <Eye size={15} />
           Preview
         </Link>
-        <DeleteReportButton id={report.id} reference={report.report_reference} variant="icon" />
+        {canDelete && (
+          <DeleteReportButton id={report.id} reference={report.report_reference} variant="icon" />
+        )}
       </div>
     </div>
   )

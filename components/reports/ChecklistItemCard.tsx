@@ -35,8 +35,11 @@ export function ChecklistItemCard({
   const showIssue = isIssue(status)
   const photos = state.photos ?? []
   const selected = state.commonIssues ?? []
-  // Once the inspector edits the comment, stop auto-overwriting it.
-  const manualRef = useRef<boolean>(Boolean(state.comment && state.comment.trim()))
+  // Once the inspector edits the comment, stop auto-overwriting it. Initialise from
+  // the persisted `commentManual` flag, NOT comment presence — auto-generated
+  // comments are saved too, so checking presence would wrongly lock regeneration
+  // on every reloaded draft.
+  const manualRef = useRef<boolean>(state.commentManual === true)
 
   function regen(next: ChecklistItemState): string {
     const s = itemStatus(next)
@@ -79,8 +82,8 @@ export function ChecklistItemCard({
   function setTyre(field: 'tyreManufacturer' | 'tyreDate' | 'tread', value: string) {
     onChange({ ...state, [field]: value })
   }
-  function addPhoto(photo: PhotoRef) {
-    onChange({ ...state, photos: [...photos, photo] })
+  function addPhotos(newPhotos: PhotoRef[]) {
+    onChange({ ...state, photos: [...photos, ...newPhotos] })
   }
   function removePhoto(photo: PhotoRef) {
     onChange({ ...state, photos: photos.filter((p) => p.id !== photo.id) })
@@ -224,7 +227,7 @@ export function ChecklistItemCard({
             reportId={reportId}
             photos={photos}
             target={{ sectionId, itemId: item.id }}
-            onAdd={addPhoto}
+            onAdd={addPhotos}
             onRemove={removePhoto}
             onUpdate={updatePhoto}
           />

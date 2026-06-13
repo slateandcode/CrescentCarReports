@@ -119,6 +119,11 @@ export async function saveReport(id: string, patch: ReportPatch): Promise<SaveRe
     }
   }
 
+  // Server actions are public endpoints: re-verify the session on every mutation
+  // rather than trusting RLS or the throttled middleware suspension check.
+  const session = await getSessionUser()
+  if (!session) return { ok: false, error: 'Your session has expired. Please sign in again.' }
+
   const supabase = await createClient()
 
   const { data: existing } = await supabase
@@ -165,6 +170,9 @@ export async function completeReport(id: string): Promise<SaveResult> {
     return { ok: true }
   }
 
+  const session = await getSessionUser()
+  if (!session) return { ok: false, error: 'Your session has expired. Please sign in again.' }
+
   const supabase = await createClient()
   const { data: report } = await supabase
     .from('inspection_reports')
@@ -198,6 +206,9 @@ export async function reopenReport(id: string): Promise<SaveResult> {
     revalidatePath(`/reports/${id}/edit`)
     return { ok: true }
   }
+  const session = await getSessionUser()
+  if (!session) return { ok: false, error: 'Your session has expired. Please sign in again.' }
+
   const supabase = await createClient()
   const { error } = await supabase
     .from('inspection_reports')
@@ -218,6 +229,9 @@ export async function setReportStatus(
     revalidatePath('/reports')
     return { ok: true }
   }
+  const session = await getSessionUser()
+  if (!session) return { ok: false, error: 'Your session has expired. Please sign in again.' }
+
   const supabase = await createClient()
   const { error } = await supabase.from('inspection_reports').update({ status }).eq('id', id)
   if (error) return { ok: false, error: error.message }
@@ -238,6 +252,16 @@ export async function deleteReport(id: string): Promise<{ ok: boolean; error?: s
     revalidatePath('/reports')
     revalidatePath('/dashboard')
     return existed ? { ok: true } : { ok: false, error: 'Report not found.' }
+  }
+
+  // Admin-only: migration 008 tightened the table DELETE policy to admins, but the
+  // delete_report_renumber RPC is SECURITY DEFINER and still authorises by
+  // own-or-admin, so a non-admin inspector could otherwise delete their own report
+  // (and re-sequence everyone's references). Enforce admin here, the only caller.
+  const session = await getSessionUser()
+  if (!session) return { ok: false, error: 'Your session has expired. Please sign in again.' }
+  if (session.profile.role !== 'admin') {
+    return { ok: false, error: 'Only admins can delete reports.' }
   }
 
   const supabase = await createClient()

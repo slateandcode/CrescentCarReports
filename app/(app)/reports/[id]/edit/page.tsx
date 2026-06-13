@@ -22,7 +22,11 @@ export default async function EditReportPage({ params }: { params: Promise<{ id:
       >
         <ArrowLeft size={16} /> Reports
       </Link>
-      <ReportEditor report={report} inspectorName={profile.full_name} />
+      <ReportEditor
+        report={report}
+        inspectorName={profile.full_name}
+        canDelete={profile.role === 'admin'}
+      />
     </div>
   )
 }

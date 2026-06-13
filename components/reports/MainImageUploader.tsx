@@ -21,14 +21,17 @@ export function MainImageUploader({
   const inputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [adjusting, setAdjusting] = useState(false)
+  // The photo currently open in the adjuster — held in state (not a ref) so the
+  // render reflects it; reading a ref during render is fragile and lint-banned.
+  const [adjustTarget, setAdjustTarget] = useState<PhotoRef | null>(null)
+  // Last UPLOADED ref, kept only to clean up the old storage file on replace /
+  // remove. Read/written exclusively in event handlers, never during render.
   const lastRef = useRef<PhotoRef | null>(null)
 
-  /** PhotoRef for the current image — from the last upload, or rebuilt from the
-   *  saved URL (path parsed out of the public storage URL) on a reloaded report. */
+  /** PhotoRef for the current image, rebuilt from the saved URL (path parsed out
+   *  of the public storage URL). Pure — safe to call during render. */
   function currentRef(): PhotoRef | null {
     if (!url) return null
-    if (lastRef.current && lastRef.current.url === url) return lastRef.current
     const path = pathFromPublicUrl(url)
     return path ? { id: 'main', url, path, caption: null, sectionId: 'main', itemId: null } : null
   }
@@ -91,10 +94,7 @@ export function MainImageUploader({
         {url && !IS_DEMO && currentRef() && (
           <button
             type="button"
-            onClick={() => {
-              lastRef.current = currentRef()
-              setAdjusting(true)
-            }}
+            onClick={() => setAdjustTarget(currentRef())}
             disabled={busy}
             className="btn-secondary h-11 w-11 shrink-0 px-0"
             title="Rotate the photo"
@@ -109,20 +109,21 @@ export function MainImageUploader({
         )}
       </div>
 
-      {adjusting && lastRef.current && (
+      {adjustTarget && (
         <PhotoAdjuster
-          photo={lastRef.current}
+          photo={adjustTarget}
           allowFit={false}
           allowCaption={false}
           onChange={(next) => {
             lastRef.current = next
+            setAdjustTarget(next)
             onChange(next.url)
           }}
           onRemove={() => {
-            setAdjusting(false)
+            setAdjustTarget(null)
             void remove()
           }}
-          onClose={() => setAdjusting(false)}
+          onClose={() => setAdjustTarget(null)}
         />
       )}
 

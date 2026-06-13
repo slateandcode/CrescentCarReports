@@ -133,24 +133,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Cover / divider hero: layered radial + linear wash over near-black so the
-   cover has depth even when no vehicle photo is supplied. */
-.doc-hero-wash {
-  background: linear-gradient(180deg, #121212 0%, #0b0b0b 60%, #0a0a0a 100%);
-}
-/* Gradient that keeps a supplied cover photo legible behind white type. */
-.doc-photo-scrim {
-  background: linear-gradient(180deg, rgba(10, 10, 10, 0.72) 0%, rgba(10, 10, 10, 0.18) 40%, rgba(10, 10, 10, 0.82) 100%);
-}
-
-/* Thin gold rule used as a recurring accent. */
-.doc-rule {
-  height: 3px;
-  width: 56px;
-  border-radius: 999px;
-  background: #ffc600;
-}
-
 @media screen {
   .report-doc {
     padding: 24px 12px 80px;

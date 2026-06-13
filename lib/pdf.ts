@@ -14,6 +14,13 @@ import { join } from 'node:path'
  * Works wherever a Chromium binary exists (local dev, or a server with
  * `CHROME_PATH` set). On hosts without one (e.g. plain serverless), the caller
  * should fall back to browser print.
+ *
+ * NOTE: `next build` prints a harmless Turbopack NFT warning ("the whole project
+ * was traced unintentionally") for the PDF route because of the runtime fs/spawn
+ * calls below, which the tracer can't statically scope. It does not affect the
+ * build (which succeeds) or the route, and the deploy doesn't use standalone
+ * output so the over-trace is inert. turbopackIgnore comments don't suppress it;
+ * a broad outputFileTracingExcludes would risk stripping the function's real deps.
  */
 
 const CHROME_CANDIDATES: string[] = [

@@ -324,8 +324,12 @@ export async function createReportFromBooking(bookingId: string): Promise<Bookin
     }
     const { error: linkErr } = await supabase.from('bookings').update(bookingUpdate).eq('id', bookingId)
     if (linkErr) {
-      // The report exists — surface the link problem instead of redirecting.
-      return { ok: false, error: `Report created but could not be linked: ${linkErr.message}` }
+      // Roll back the just-created report. The guard above keys off
+      // bookings.report_id (which we never managed to set), so without this a
+      // retry would allocate a SECOND reference and create a duplicate report,
+      // orphaning the first. Best-effort delete so a retry starts clean.
+      await supabase.from('inspection_reports').delete().eq('id', reportId)
+      return { ok: false, error: `Could not link the report to the booking: ${linkErr.message}. Please try again.` }
     }
 
     revalidateBooking(bookingId)

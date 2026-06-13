@@ -3,6 +3,7 @@ import { IS_DEMO } from '@/lib/env'
 import {
   SLOTS,
   SLOT_TIMES,
+  isLiveHold,
   type BookingStatus,
   type BookingWithInspector,
   type SlotTime,
@@ -197,7 +198,14 @@ export async function getDaySchedule(date: string): Promise<DaySlot[]> {
     return {
       slot,
       label: SLOTS[slot],
-      booking: bookings.find((b) => b.slot_time === slot) ?? null,
+      // Ignore an EXPIRED pending_payment hold: the availability RPC sweeps stale
+      // holds (expire_stale_holds) and reports the slot free, but this direct
+      // query — run in parallel — may still return the un-swept row. Without this
+      // filter the schedule shows a phantom "Pending Payment" on a free slot.
+      booking:
+        bookings.find(
+          (b) => b.slot_time === slot && (b.booking_status !== 'pending_payment' || isLiveHold(b)),
+        ) ?? null,
       block: blocks.find((b) => b.slot_time === slot) ?? null,
       available: row?.available ?? true,
       reason: row?.reason ?? null,

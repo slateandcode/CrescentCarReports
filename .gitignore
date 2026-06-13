@@ -41,3 +41,8 @@ next-env.d.ts
 
 # internal docs / source assets (kept local, not part of the deploy)
 *.pdf
+
+# build output + local-only working dirs (never committed)
+.netlify/
+.claude/
+/scratch/

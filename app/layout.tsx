@@ -6,6 +6,8 @@ const inter = Inter({
   subsets: ['latin'],
   display: 'swap',
   variable: '--font-inter',
+  // True italics — the report cover headline is set in Inter Black Italic.
+  style: ['normal', 'italic'],
 })
 
 const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || 'Crescent Car Reports'

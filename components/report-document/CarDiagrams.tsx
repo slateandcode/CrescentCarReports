@@ -1,10 +1,16 @@
+import type { ReactNode } from 'react'
 import type { ChecklistStatus, PaintCondition } from '@/lib/report-types'
-import { PAINT_LABEL, PAINT_OPTIONS } from '@/lib/issues'
+import { PAINT_LABEL, PAINT_OPTIONS, PAINT_HEX } from '@/lib/issues'
+import { SIDE_ART, TOP_ART, type ExteriorView } from './exterior-art'
 
 /**
- * Pure-SVG schematic car diagrams for the printed report. No external assets so
- * they render identically on screen and in the PDF. The wheel layout is tinted
- * by checklist status; the body map is tinted by per-panel paint condition.
+ * Schematic car diagrams for the printed report.
+ *
+ * The wheel layout (tyres page) stays a primitive-SVG schematic. The exterior
+ * paint map renders the vector-traced blueprint (line-art) with each panel
+ * segmented out of that drawing as its own fill region (see exterior-art.ts),
+ * so every door, fender, quarter and bumper fills its true shape with its
+ * paint-condition colour. Everything is inline SVG so it prints identically.
  */
 
 const FILL: Record<ChecklistStatus, { fill: string; stroke: string; text: string }> = {
@@ -61,84 +67,66 @@ export function WheelLayout({ corners, size = 190 }: { corners: CornerStatuses; 
   )
 }
 
-// ─── Top-down body / paint map ─────────────────────────────────────────────
+// ─── Exterior body map (traced blueprint + segmented panels) ───────────────
 /** Per-panel paint conditions keyed by PAINT_PANELS ids. */
 export type PaintMap = Record<string, PaintCondition | undefined>
 
-const PAINT_FILL: Record<PaintCondition, { fill: string; stroke: string }> = {
-  original: { fill: 'rgba(34,197,94,0.18)', stroke: '#22C55E' },
-  cosmetic: { fill: 'rgba(59,130,246,0.18)', stroke: '#3B82F6' },
-  repainted: { fill: 'rgba(245,158,11,0.20)', stroke: '#F59E0B' },
-  faded: { fill: 'rgba(168,85,247,0.18)', stroke: '#A855F7' },
-}
-// An unmarked panel is treated as original paint (matches the report copy
-// "recorded as original / not separately marked" and the paint legend, which has
-// no neutral entry) so the whole body is always depicted rather than left blank.
-function paintZone(c?: PaintCondition) {
-  return PAINT_FILL[c ?? 'original']
-}
+const INK = '#2B2B29'
+const WHEEL_CUT = '#ECECEA'
 
-export function BodyPaintView({ paint, width = 184 }: { paint: PaintMap; width?: number }) {
-  const panel = (x: number, y: number, w: number, h: number, id: string, rx = 4) => {
-    const z = paintZone(paint[id])
-    return <rect x={x} y={y} width={w} height={h} rx={rx} fill={z.fill} stroke={z.stroke} strokeWidth="1.4" />
-  }
+/** Semi-opaque fills so the traced line-art reads through the colour. */
+const PANEL_FILL: Record<PaintCondition, string> = {
+  original: 'rgba(34,197,94,0.60)',
+  cosmetic: 'rgba(59,130,246,0.55)',
+  repainted: 'rgba(245,158,11,0.62)',
+  faded: 'rgba(168,85,247,0.55)',
+}
+/** Panels the inspector never marked — neutral grey, NOT green "original", so the
+ *  map doesn't claim unchecked panels were verified original. */
+const PANEL_NEUTRAL = 'rgba(148,163,184,0.22)'
 
-  return (
-    <svg width={width} height={width * 1.62} viewBox="0 0 200 324" className="shrink-0">
-      {/* wheels — drawn first so the body overlaps their inner edge */}
-      {[
-        [33, 58],
-        [149, 58],
-        [33, 232],
-        [149, 232],
-      ].map(([x, y], i) => (
-        <rect key={i} x={x} y={y} width="18" height="42" rx="6" fill="#34322B" />
+function ExteriorViewSvg({ view, paint, flipX }: { view: ExteriorView; paint: PaintMap; flipX?: boolean }) {
+  const width = Number(view.viewBox.split(' ')[2])
+  const content = (
+    <>
+      {/* panel fills (each segmented from the drawing) */}
+      {Object.entries(view.panels).map(([id, d]) => (
+        <path key={id} d={d} fill={paint[id] ? PANEL_FILL[paint[id]] : PANEL_NEUTRAL} />
       ))}
-
-      {/* car body silhouette */}
-      <path
-        d="M70,18 H130 Q150,18 150,46 V278 Q150,306 130,306 H70 Q50,306 50,278 V46 Q50,18 70,18 Z"
-        fill="#F4F4F1"
-        stroke="#D6D3CB"
-        strokeWidth="2"
-      />
-
-      {/* left side, front→rear: fender, front door, rear door, quarter */}
-      {panel(53, 44, 12, 40, 'front-left-fender')}
-      {panel(53, 88, 11, 46, 'front-left-door')}
-      {panel(53, 136, 11, 44, 'rear-left-door')}
-      {panel(53, 184, 12, 52, 'rear-left-quarter')}
-      {/* right side */}
-      {panel(135, 44, 12, 40, 'front-right-fender')}
-      {panel(136, 88, 11, 46, 'front-right-door')}
-      {panel(136, 136, 11, 44, 'rear-right-door')}
-      {panel(135, 184, 12, 52, 'rear-right-quarter')}
-
-      {/* front: bumper + bonnet */}
-      {panel(62, 24, 76, 13, 'front-bumper', 6)}
-      {panel(64, 41, 72, 42, 'bonnet', 5)}
-
-      {/* glass + roof greenhouse (glass neutral; roof + boot tinted) */}
-      <path d="M68,88 H132 L124,108 H76 Z" fill="#CBD8E0" />
-      {panel(64, 112, 72, 62, 'roof', 5)}
-      <path d="M76,190 H124 L132,210 H68 Z" fill="#CBD8E0" />
-      {panel(64, 214, 72, 28, 'boot', 5)}
-
-      {/* rear: bumper */}
-      {panel(62, 288, 76, 13, 'rear-bumper', 6)}
-
-      {/* side mirrors */}
-      <rect x="46" y="92" width="6" height="10" rx="2" fill="#D6D3CB" />
-      <rect x="148" y="92" width="6" height="10" rx="2" fill="#D6D3CB" />
-
-      <text x="100" y="11" textAnchor="middle" fontSize="8.5" fontWeight="700" fill="#9CA3AF" letterSpacing="1.5">
-        FRONT
-      </text>
-      <text x="100" y="320" textAnchor="middle" fontSize="8.5" fontWeight="700" fill="#9CA3AF" letterSpacing="1.5">
-        REAR
-      </text>
+      {/* neutral wheels under the line-art */}
+      {view.wheels?.map(([cx, cy, r], i) => <circle key={i} cx={cx} cy={cy} r={r} fill={WHEEL_CUT} />)}
+      {/* traced line-art on top defines every edge */}
+      <path d={view.line} fill={INK} fillRule="evenodd" />
+    </>
+  )
+  return (
+    <svg viewBox={view.viewBox} className="h-auto w-full" role="img">
+      {/* flipX mirrors the view so its front points the same way as the side view */}
+      {flipX ? <g transform={`translate(${width},0) scale(-1,1)`}>{content}</g> : content}
     </svg>
+  )
+}
+
+function ViewFrame({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col rounded-lg border border-doc-border bg-white px-2.5 py-2">
+      <span className="mb-1 text-[8px] font-semibold uppercase tracking-[0.14em] text-doc-muted">{label}</span>
+      <div className="flex flex-1 items-center justify-center">{children}</div>
+    </div>
+  )
+}
+
+/** Colour-coded exterior paint map — side profile + top-down. */
+export function ExteriorBodyMap({ paint }: { paint: PaintMap }) {
+  return (
+    <div className="mx-auto flex max-w-2xl flex-col gap-2.5">
+      <ViewFrame label="Side">
+        <ExteriorViewSvg view={SIDE_ART} paint={paint} />
+      </ViewFrame>
+      <ViewFrame label="Top">
+        <ExteriorViewSvg view={TOP_ART} paint={paint} flipX />
+      </ViewFrame>
+    </div>
   )
 }
 
@@ -168,10 +156,14 @@ export function PaintLegend() {
     <div className="flex flex-wrap gap-x-5 gap-y-1.5">
       {PAINT_OPTIONS.map((opt) => (
         <span key={opt} className="flex items-center gap-1.5 text-[11px] text-doc-muted">
-          <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: PAINT_FILL[opt].stroke }} />
+          <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: PAINT_HEX[opt] }} />
           {PAINT_LABEL[opt]}
         </span>
       ))}
+      <span className="flex items-center gap-1.5 text-[11px] text-doc-muted">
+        <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: '#D4D4D0' }} />
+        Not assessed
+      </span>
     </div>
   )
 }
