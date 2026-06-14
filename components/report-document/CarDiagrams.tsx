@@ -151,24 +151,25 @@ const SIDE_RIGHT_MAP: Record<string, string> = {
   'rear-left-quarter': 'rear-right-quarter',
 }
 
-/** The top-view art is drawn nose-right, but its panel paths are keyed front↔rear
- *  swapped relative to the drawing — so the paint landed on the wrong end (the
- *  "bonnet" colour appeared on the tail). Remap each path to the panel that
- *  actually sits at its position, keeping left/right flanks, so the colours match
- *  the car's real geometry and the nose reads to the right like the side view. */
+/** The top-view art's line drawing noses RIGHT, but its panel paths are keyed as
+ *  if the car nosed LEFT — a full 180° rotation off (front↔rear AND left↔right).
+ *  Verified by rendering each panel id in a unique colour (scratch/calibration).
+ *  We render the top view flipped vertically (`flipY`) so the car's RIGHT flank
+ *  sits on the TOP edge — continuing the Right-side view above it — and remap each
+ *  path to its 180°-opposite panel so every region shows the correct paint. */
 const TOP_FIX_MAP: Record<string, string> = {
   'front-bumper': 'rear-bumper',
   'rear-bumper': 'front-bumper',
   bonnet: 'boot',
   boot: 'bonnet',
-  'front-left-fender': 'rear-left-quarter',
-  'rear-left-quarter': 'front-left-fender',
-  'front-right-fender': 'rear-right-quarter',
-  'rear-right-quarter': 'front-right-fender',
-  'front-left-door': 'rear-left-door',
-  'rear-left-door': 'front-left-door',
-  'front-right-door': 'rear-right-door',
-  'rear-right-door': 'front-right-door',
+  'front-right-fender': 'rear-left-quarter',
+  'rear-left-quarter': 'front-right-fender',
+  'front-left-fender': 'rear-right-quarter',
+  'rear-right-quarter': 'front-left-fender',
+  'front-right-door': 'rear-left-door',
+  'rear-left-door': 'front-right-door',
+  'front-left-door': 'rear-right-door',
+  'rear-right-door': 'front-left-door',
 }
 
 /** Colour-coded exterior paint map laid out as the client's "unfold": right side
@@ -177,8 +178,9 @@ const TOP_FIX_MAP: Record<string, string> = {
  *  reads as folding down off the top view.
  *
  *  • Right side = the side art (nose right), panels remapped to right-side paint.
- *  • Top view   = drawn nose-right (matching the side profiles), with its paint
- *                 remapped front↔rear to correct the art's swapped panel keys.
+ *  • Top view   = nose-right, flipped vertically so the right flank is on the top
+ *                 edge (under the right-side view), with paint remapped 180° to
+ *                 correct the art's rotated panel keys (see TOP_FIX_MAP).
  *  • Left side  = the side art flipped vertically (unfolded downward).
  *
  *  All three are wide and short, so we cap their height to keep the whole exterior
@@ -192,7 +194,7 @@ export function ExteriorBodyMap({ paint }: { paint: PaintMap }) {
         <ExteriorViewSvg view={SIDE_ART} paint={paint} panelMap={SIDE_RIGHT_MAP} svgClassName={viewCls} />
       </ViewFrame>
       <ViewFrame label="Top view">
-        <ExteriorViewSvg view={TOP_ART} paint={paint} panelMap={TOP_FIX_MAP} svgClassName={viewCls} />
+        <ExteriorViewSvg view={TOP_ART} paint={paint} flipY panelMap={TOP_FIX_MAP} svgClassName={viewCls} />
       </ViewFrame>
       <ViewFrame label="Left side">
         <ExteriorViewSvg view={SIDE_ART} paint={paint} flipY svgClassName={viewCls} />
