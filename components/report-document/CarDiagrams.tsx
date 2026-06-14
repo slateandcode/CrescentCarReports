@@ -156,11 +156,12 @@ const SIDE_RIGHT_MAP: Record<string, string> = {
  *  way (right), so the three read as one car folded open.
  *
  *  • Right side = the side art (nose right), panels remapped to right-side paint.
- *  • Top view   = the top art mirrored horizontally (`flipX`). As authored the top
- *                 art noses LEFT with the car's RIGHT flank already on the top edge;
- *                 a single horizontal flip turns it nose-right (matching the side
- *                 views) while leaving the right flank on top — so every panel keeps
- *                 its own paint, no remap, and the line-art points the right way.
+ *  • Top view   = the top art rotated 180° (`flipX` + `flipY`). As authored the top
+ *                 art noses LEFT; a 180° rotation turns it nose-right (matching the
+ *                 side views) AND — because a real bird's-eye view of a right-nosed
+ *                 car puts the RIGHT flank on the BOTTOM edge — drops the right flank
+ *                 to the bottom so it sits directly under the right-side fenders
+ *                 above. Every panel keeps its own paint, no remap.
  *  • Left side  = the side art flipped vertically (unfolded downward).
  *
  *  All three are wide and short, so we cap their height to keep the whole exterior
@@ -174,7 +175,7 @@ export function ExteriorBodyMap({ paint }: { paint: PaintMap }) {
         <ExteriorViewSvg view={SIDE_ART} paint={paint} panelMap={SIDE_RIGHT_MAP} svgClassName={viewCls} />
       </ViewFrame>
       <ViewFrame label="Top view">
-        <ExteriorViewSvg view={TOP_ART} paint={paint} flipX svgClassName={viewCls} />
+        <ExteriorViewSvg view={TOP_ART} paint={paint} flipX flipY svgClassName={viewCls} />
       </ViewFrame>
       <ViewFrame label="Left side">
         <ExteriorViewSvg view={SIDE_ART} paint={paint} flipY svgClassName={viewCls} />
