@@ -12,10 +12,28 @@ export function PrintButton({ reportId, reference, className }: { reportId: stri
   const [busy, setBusy] = useState(false)
   const [fallback, setFallback] = useState(false)
 
+  const pdfUrl = `/reports/${reportId}/pdf`
+
+  // iOS Safari (incl. iPadOS, which reports as "MacIntel" + touch) ignores the
+  // <a download> attribute and won't save a blob: URL, so the blob path below
+  // silently does nothing on a phone. There we navigate straight to the server
+  // route instead — iOS opens the PDF in its viewer with Share → Save / WhatsApp.
+  function isAppleMobile() {
+    if (typeof navigator === 'undefined') return false
+    return (
+      /iP(hone|ad|od)/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+    )
+  }
+
   async function downloadPdf() {
+    if (isAppleMobile()) {
+      window.location.href = pdfUrl
+      return
+    }
     setBusy(true)
     try {
-      const res = await fetch(`/reports/${reportId}/pdf`, { cache: 'no-store' })
+      const res = await fetch(pdfUrl, { cache: 'no-store' })
       if (!res.ok) throw new Error(await res.text().catch(() => 'PDF generation failed'))
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)

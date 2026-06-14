@@ -35,7 +35,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     return new Response(new Uint8Array(pdf), {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${filename}"`,
+        // `inline` so iOS Safari opens the PDF in its viewer (where the user can
+        // Share → Save to Files / WhatsApp); desktop still force-downloads it via
+        // the blob + download-attribute path in PrintButton.
+        'Content-Disposition': `inline; filename="${filename}"`,
         'Cache-Control': 'no-store',
       },
     })
