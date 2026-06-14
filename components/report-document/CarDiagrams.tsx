@@ -151,13 +151,34 @@ const SIDE_RIGHT_MAP: Record<string, string> = {
   'rear-left-quarter': 'rear-right-quarter',
 }
 
+/** The top-view art is drawn nose-right, but its panel paths are keyed front↔rear
+ *  swapped relative to the drawing — so the paint landed on the wrong end (the
+ *  "bonnet" colour appeared on the tail). Remap each path to the panel that
+ *  actually sits at its position, keeping left/right flanks, so the colours match
+ *  the car's real geometry and the nose reads to the right like the side view. */
+const TOP_FIX_MAP: Record<string, string> = {
+  'front-bumper': 'rear-bumper',
+  'rear-bumper': 'front-bumper',
+  bonnet: 'boot',
+  boot: 'bonnet',
+  'front-left-fender': 'rear-left-quarter',
+  'rear-left-quarter': 'front-left-fender',
+  'front-right-fender': 'rear-right-quarter',
+  'rear-right-quarter': 'front-right-fender',
+  'front-left-door': 'rear-left-door',
+  'rear-left-door': 'front-left-door',
+  'front-right-door': 'rear-right-door',
+  'rear-right-door': 'front-right-door',
+}
+
 /** Colour-coded exterior paint map laid out as the client's "unfold": right side
  *  on top, top-down in the middle, left side below — every view with the nose
  *  pointing the same way (right), and the left side mirrored vertically so it
  *  reads as folding down off the top view.
  *
  *  • Right side = the side art (nose right), panels remapped to right-side paint.
- *  • Top view   = mirrored so the nose points right, matching the side profiles.
+ *  • Top view   = drawn nose-right (matching the side profiles), with its paint
+ *                 remapped front↔rear to correct the art's swapped panel keys.
  *  • Left side  = the side art flipped vertically (unfolded downward).
  *
  *  All three are wide and short, so we cap their height to keep the whole exterior
@@ -171,7 +192,7 @@ export function ExteriorBodyMap({ paint }: { paint: PaintMap }) {
         <ExteriorViewSvg view={SIDE_ART} paint={paint} panelMap={SIDE_RIGHT_MAP} svgClassName={viewCls} />
       </ViewFrame>
       <ViewFrame label="Top view">
-        <ExteriorViewSvg view={TOP_ART} paint={paint} flipX svgClassName={viewCls} />
+        <ExteriorViewSvg view={TOP_ART} paint={paint} panelMap={TOP_FIX_MAP} svgClassName={viewCls} />
       </ViewFrame>
       <ViewFrame label="Left side">
         <ExteriorViewSvg view={SIDE_ART} paint={paint} flipY svgClassName={viewCls} />
