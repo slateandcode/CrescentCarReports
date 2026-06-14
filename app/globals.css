@@ -3,6 +3,35 @@
 @tailwind utilities;
 
 @layer base {
+  /* ── App-shell theme tokens ───────────────────────────────────────────────
+     Tailwind shell colours resolve to these variables (see tailwind.config.ts).
+     :root holds the default DARK theme; [data-theme="light"] overrides it. The
+     printable report uses the fixed doc-* tokens and is never themed. */
+  :root,
+  [data-theme='dark'] {
+    --color-background: #0a0a0a;
+    --color-surface: #111111;
+    --color-card: #1a1a1a;
+    --color-card-hover: #1f1f1f;
+    --color-border: #2a2a2a;
+    --color-border-hover: #3a3a3a;
+    --color-text-primary: #ffffff;
+    --color-text-secondary: #a0a0a0;
+    --color-text-muted: #555555;
+  }
+
+  [data-theme='light'] {
+    --color-background: #f5f5f4;
+    --color-surface: #ffffff;
+    --color-card: #ffffff;
+    --color-card-hover: #f2f2f0;
+    --color-border: #e2e2de;
+    --color-border-hover: #cfcfc9;
+    --color-text-primary: #0a0a0a;
+    --color-text-secondary: #525252;
+    --color-text-muted: #8a8a8a;
+  }
+
   *,
   *::before,
   *::after {
@@ -16,8 +45,8 @@
   }
 
   body {
-    background-color: #0a0a0a;
-    color: #ffffff;
+    background-color: var(--color-background);
+    color: var(--color-text-primary);
     font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -55,9 +84,13 @@
 
   input[type='date']::-webkit-calendar-picker-indicator,
   input[type='time']::-webkit-calendar-picker-indicator {
-    filter: invert(1);
     cursor: pointer;
     opacity: 0.6;
+  }
+  /* The native picker icon is dark; invert it only on the dark theme. */
+  [data-theme='dark'] input[type='date']::-webkit-calendar-picker-indicator,
+  [data-theme='dark'] input[type='time']::-webkit-calendar-picker-indicator {
+    filter: invert(1);
   }
 }
 
@@ -158,12 +191,28 @@
     font-size: 16px !important;
   }
 
-  /* Fit the fixed 210mm A4 document to the viewport so the preview is readable
-     without horizontal scrolling. Pinch-zoom (enabled app-wide) covers fine
-     detail. `zoom` (not transform) so the layout box shrinks with it. Never
-     applied to print — the @media print block below keeps the PDF true A4. */
+  /* Fit the fixed 210mm A4 document to the phone viewport so the preview is
+     readable without horizontal scrolling. We scale each page with `transform`
+     (reliably honoured by iOS Safari, unlike `zoom`, which was leaving the page
+     full-size and overlapping the highlight grid). `overflow-x: clip` hides the
+     leftover (un-scaled) layout-box width, margin-left centres the scaled page,
+     and a negative bottom margin pulls each page up to remove the empty space the
+     transform leaves behind (A4 page height ≈ 297mm). Pinch-zoom still covers fine
+     detail. Never applied to print — the @media print block keeps the PDF true A4. */
   .report-doc {
-    zoom: 0.46;
+    /* Unitless ratio — scale() needs a number, not a length, and CSS calc can't
+       divide a length by a length to make one. 0.46 fits a ~365px-wide A4 page,
+       matching the previous zoom factor (good down to ~375px phones). */
+    --report-scale: 0.46;
+    overflow-x: clip;
+    padding: 12px 0 40px;
+  }
+  .report-page {
+    transform: scale(var(--report-scale));
+    transform-origin: top left;
+    /* Centre the scaled page — its un-scaled 794px layout box is left-aligned. */
+    margin-left: calc((100vw - 794px * var(--report-scale)) / 2);
+    margin-bottom: calc(16px - 297mm * (1 - var(--report-scale)));
   }
 }
 

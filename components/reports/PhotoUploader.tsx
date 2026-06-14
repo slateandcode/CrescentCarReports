@@ -21,7 +21,8 @@ interface Props {
   onUpdate?: (photo: PhotoRef) => void
   label?: string
   className?: string
-  /** Use the rear camera by default on phones. */
+  /** Force the device camera (no gallery) on phones. Defaults to false so the
+   *  inspector can pick an existing photo from the gallery as well as shoot one. */
   capture?: boolean
 }
 
@@ -34,7 +35,7 @@ export function PhotoUploader({
   onUpdate,
   label = 'Add photo',
   className,
-  capture = true,
+  capture = false,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)

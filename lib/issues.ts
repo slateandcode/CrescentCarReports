@@ -8,17 +8,10 @@ import type { ChecklistStatus, PaintCondition } from './report-types'
 // customer-facing comment is generated automatically from the selection.
 // ════════════════════════════════════════════════════════════════════════
 
-/** Common fault tick-boxes per scored section (brief sections A–H). */
+/** Common fault tick-boxes per scored section (brief sections A–H).
+ *  Note: Accident History uses single-select ACCIDENT_PRESETS (below), not this
+ *  multi-select map, so it has no entry here. */
 export const COMMON_ISSUES: Record<string, string[]> = {
-  'accident-history': [
-    'Minor accident record found',
-    'Major accident record found',
-    'Salvage / total loss history',
-    'Flood history',
-    'Airbag deployment history',
-    'Structural / chassis repair reported',
-    'Source data limited or unavailable',
-  ],
   exterior: [
     'Scratches',
     'Dents',
@@ -117,6 +110,67 @@ export const COMMON_ISSUES: Record<string, string[]> = {
 /** Common faults available for a section (empty array if none configured). */
 export function commonIssuesForSection(sectionId: string): string[] {
   return COMMON_ISSUES[sectionId] ?? []
+}
+
+/**
+ * Common fault tick-boxes scoped to a single checklist ITEM, where one section's
+ * items need different lists (the endoscopic section: engine vs underbody). A
+ * "Custom note" is always available via the free-text inspector note, so it is
+ * not listed as a chip here.
+ */
+export const COMMON_ISSUES_BY_ITEM: Record<string, string[]> = {
+  'engine-endoscopic': [
+    'Oil residue observed',
+    'Carbon build-up observed',
+    'Seepage visible in inspected area',
+    'Active leak visible in inspected area',
+    'Heavy oil contamination observed',
+    'Visible internal damage / abnormal wear',
+  ],
+  'underbody-endoscopic': [
+    'Surface rust observed',
+    'Scrape / cosmetic damage observed',
+    'Moisture / residue observed',
+    'Active leak visible in hidden area',
+    'Significant corrosion observed',
+    'Hidden impact damage observed',
+    'Poor repair / concealed damage observed',
+  ],
+}
+
+/** Common faults for an item, falling back to the section list when none is set. */
+export function commonIssuesForItem(sectionId: string, itemId: string): string[] {
+  return COMMON_ISSUES_BY_ITEM[itemId] ?? commonIssuesForSection(sectionId)
+}
+
+// ─── Accident History (single-select presets) ──────────────────────────────
+
+export interface AccidentPreset {
+  /** Clean, customer-facing label (no bracket). */
+  label: string
+  /** Severity the preset maps the single accident check to. */
+  severity: Extract<ChecklistStatus, 'minor' | 'major'>
+}
+
+/**
+ * The brief's preset findings for the single "Accident record result" check. The
+ * [Minor]/[Major] bracket shown to inspectors is derived from `severity` in the
+ * editor and is NEVER stored or printed — only the clean `label` is.
+ */
+export const ACCIDENT_PRESETS: AccidentPreset[] = [
+  { label: 'Minor Accident History', severity: 'minor' },
+  { label: 'Source data limited or unavailable', severity: 'minor' },
+  { label: 'Salvage history – repaired well / no visible structural concern', severity: 'minor' },
+  { label: 'Salvage history – poor repair / visible structural concern', severity: 'major' },
+  { label: 'Total loss / write-off history', severity: 'major' },
+  { label: 'Flood history', severity: 'major' },
+  { label: 'Fire damage history', severity: 'major' },
+]
+
+/** Customer-facing comment for the accident check, from the selected preset. */
+export function generateAccidentComment(preset: AccidentPreset | null): string {
+  if (!preset) return 'No accident record was found in the sources checked.'
+  return `${preset.label} reported in the sources checked.`
 }
 
 // ─── Auto-comment generation ───────────────────────────────────────────────

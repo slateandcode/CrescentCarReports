@@ -14,7 +14,7 @@ import type {
   BuyerRecommendation,
   ReportStatus,
 } from './report-types'
-import { getScoredSections, getTemplate, templateItemCount } from './report-templates'
+import { getScoredSections, getSection, getTemplate, templateItemCount } from './report-templates'
 import { PAINT_SECTION_ID, PAINT_PANELS } from './issues'
 
 // ─── Status normalisation (legacy → canonical) ─────────────────────────────
@@ -49,6 +49,27 @@ export function itemNote(state?: ChecklistItemState | null): string {
   const note = (state.notes ?? '').trim()
   const comment = (state.comment ?? '').trim()
   return note && note !== comment ? note : ''
+}
+
+/** Ordinal suffix for a small positive integer (1→"1st", 2→"2nd", 3→"3rd"…). */
+function ordinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd']
+  const v = n % 100
+  return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`
+}
+
+/**
+ * Decode a tyre DOT week/year code into plain English for the customer report.
+ * A 4-digit DOT is WWYY — week WW of year 20YY (e.g. "0419" → "4th week of 2019").
+ * Anything that isn't a clean, in-range 4-digit code (old 3-digit codes, free text,
+ * spaced input) is returned unchanged so unusual values are never mangled or hidden.
+ */
+export function decodeDot(raw?: string | null): string {
+  const value = (raw ?? '').trim()
+  if (!/^\d{4}$/.test(value)) return value
+  const week = Number(value.slice(0, 2))
+  if (week < 1 || week > 53) return value
+  return `${ordinal(week)} week of 20${value.slice(2)}`
 }
 
 export function normalizeRecommendation(
@@ -109,6 +130,12 @@ export const STATUS_HEX: Record<ChecklistStatus, string> = {
 
 export const MINOR_DEDUCTION = 10
 export const MAJOR_DEDUCTION = 30
+
+/** Accident History is scored on its own scale (brief section 6): a single
+ *  finding weighted heavily — Minor → 70/100, Major → 0/100. */
+export const ACCIDENT_SECTION_ID = 'accident-history'
+export const ACCIDENT_MINOR_DEDUCTION = 30
+export const ACCIDENT_MAJOR_DEDUCTION = 100
 
 /** Score impact per non-original exterior paint panel (applied to the exterior
  *  section): re-painted / faded −5, cosmetic −2, original 0. */
@@ -183,21 +210,53 @@ export function completionPercent(counts: ReportCounts): number {
 
 // ─── Section & overall scoring (brief sections 8 & 9) ──────────────────────
 
-/** Total point deductions within a section's stored state. */
-export function sectionDeductions(sectionState?: Record<string, ChecklistItemState>): number {
+/**
+ * Stored item-states for a section, limited to items STILL in the template.
+ * Older reports keep checklist keys for checks that were later removed (e.g. the
+ * old 5-row Accident History); counting those orphans made headers show nonsense
+ * like "5/1" and skewed scores. Filtering by the current template fixes every
+ * count/score without a data migration. Sections not in the library (the paint
+ * map) fall through to all states.
+ */
+function liveSectionStates(
+  sectionId: string | undefined,
+  sectionState: Record<string, ChecklistItemState>,
+): ChecklistItemState[] {
+  const def = sectionId ? getSection(sectionId) : undefined
+  if (!def) return Object.values(sectionState)
+  const out: ChecklistItemState[] = []
+  for (const item of def.items) {
+    const s = sectionState[item.id]
+    if (s) out.push(s)
+  }
+  return out
+}
+
+/** Total point deductions within a section's stored state. Accident History uses
+ *  its own heavier deduction scale (pass sectionId so the override applies). */
+export function sectionDeductions(
+  sectionState?: Record<string, ChecklistItemState>,
+  sectionId?: string,
+): number {
   if (!sectionState) return 0
+  const accident = sectionId === ACCIDENT_SECTION_ID
+  const minor = accident ? ACCIDENT_MINOR_DEDUCTION : MINOR_DEDUCTION
+  const major = accident ? ACCIDENT_MAJOR_DEDUCTION : MAJOR_DEDUCTION
   let d = 0
-  for (const state of Object.values(sectionState)) {
+  for (const state of liveSectionStates(sectionId, sectionState)) {
     const status = itemStatus(state)
-    if (status === 'minor') d += MINOR_DEDUCTION
-    else if (status === 'major') d += MAJOR_DEDUCTION
+    if (status === 'minor') d += minor
+    else if (status === 'major') d += major
   }
   return d
 }
 
-/** Section score out of 100 (floored at 0). */
-export function sectionScore(sectionState?: Record<string, ChecklistItemState>): number {
-  return Math.max(0, 100 - sectionDeductions(sectionState))
+/** Section score out of 100 (floored at 0). Pass sectionId for Accident History. */
+export function sectionScore(
+  sectionState?: Record<string, ChecklistItemState>,
+  sectionId?: string,
+): number {
+  return Math.max(0, 100 - sectionDeductions(sectionState, sectionId))
 }
 
 export interface SectionScore {
@@ -217,7 +276,7 @@ export function sectionScores(pkg: PackageType, checklist: ChecklistData): Secti
     for (const item of section.items) {
       if (itemStatus(sectionState[item.id])) graded += 1
     }
-    let score = sectionScore(sectionState)
+    let score = sectionScore(sectionState, section.id)
     // Exterior also carries the paint-panel deductions, and the panels count as
     // graded so a panels-only exterior still contributes to the overall score.
     if (section.id === 'exterior') {
@@ -334,7 +393,7 @@ export function sectionCounts(
   const tally: Record<ChecklistStatus, number> = { pass: 0, minor: 0, major: 0, na: 0 }
   const sectionState = checklist[sectionId]
   if (!sectionState) return tally
-  for (const state of Object.values(sectionState)) {
+  for (const state of liveSectionStates(sectionId, sectionState)) {
     const status = itemStatus(state)
     if (status) tally[status] += 1
   }

@@ -40,6 +40,7 @@ import {
   itemStatus,
   itemComment,
   itemNote,
+  decodeDot,
   isIssue,
   vehicleTitle,
   RECOMMENDATION_LABEL,
@@ -102,7 +103,7 @@ function SectionScoreHeader({
 }) {
   const checklist = report.checklist || {}
   const state = checklist[sectionId] || {}
-  const score = sectionScore(state)
+  const score = sectionScore(state, sectionId)
   const tally = sectionCounts(checklist, sectionId)
   const completed = tally.pass + tally.minor + tally.major + tally.na
   return (
@@ -832,7 +833,7 @@ export function ReportExteriorPage({ report, index }: { report: InspectionReport
           </div>
         </div>
 
-        {/* Four-view, colour-coded exterior paint map (top · side · front · rear) */}
+        {/* Colour-coded exterior paint map (right side · top · left side) */}
         <div className="mb-5 rounded-xl border border-doc-border bg-doc-surface p-3.5">
           <ExteriorBodyMap paint={paintMap} />
           <div className="mt-3 border-t border-doc-border pt-2.5">
@@ -982,11 +983,11 @@ function CornerTyreCard({ label, tyre, rim }: { label: string; tyre?: ChecklistI
       </div>
       <div className="mt-1.5 space-y-0.5 text-[10.5px] text-doc-muted">
         {tyre?.tyreManufacturer && <p><span className="font-semibold text-doc-ink">Make:</span> {tyre.tyreManufacturer}</p>}
-        {tyre?.tyreDate && <p><span className="font-semibold text-doc-ink">DOT:</span> {tyre.tyreDate}</p>}
-        {tyre?.tread && <p><span className="font-semibold text-doc-ink">Tread:</span> {tyre.tread}</p>}
+        {tyre?.tyreDate && <p><span className="font-semibold text-doc-ink">Manufactured:</span> {decodeDot(tyre.tyreDate)}</p>}
+        {tyre?.tread && <p><span className="font-semibold text-doc-ink">Tread depth:</span> {tyre.tread}</p>}
         {rStatus && (
           <p className="flex items-center gap-1">
-            <span className="font-semibold text-doc-ink">Rim:</span> {STATUS_LABEL[rStatus]}
+            <span className="font-semibold text-doc-ink">Rim condition:</span> {STATUS_LABEL[rStatus]}
           </p>
         )}
       </div>
@@ -1114,10 +1115,7 @@ export function ReportFinalNotesPage({
           {report.price_negotiation_notes && template.negotiationNotesEnabled && (
             <Callout title="Price negotiation notes">{report.price_negotiation_notes}</Callout>
           )}
-          {report.summary_call_notes && template.summaryCallNotesEnabled && (
-            <Callout title="20-minute summary call notes">{report.summary_call_notes}</Callout>
-          )}
-          {!report.inspector_summary && !report.price_negotiation_notes && !report.summary_call_notes && (
+          {!report.inspector_summary && !report.price_negotiation_notes && (
             <p className="text-[13px] text-doc-muted">No additional notes recorded.</p>
           )}
         </div>

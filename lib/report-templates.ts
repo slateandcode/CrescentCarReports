@@ -71,7 +71,6 @@ export interface PackageConfig {
   transmissionEnabled: boolean
   endoscopicEnabled: boolean
   negotiationNotesEnabled: boolean
-  summaryCallNotesEnabled: boolean
 }
 
 export interface ResolvedTemplate extends PackageConfig {
@@ -87,13 +86,9 @@ const SECTION_LIBRARY: SectionDef[] = [
     scored: true,
     weight: 9,
     kind: 'accident',
-    items: [
-      { id: 'vin-recorded', title: 'VIN / chassis number recorded' },
-      { id: 'search-completed', title: 'Accident history search completed' },
-      { id: 'accident-record', title: 'Accident record result' },
-      { id: 'salvage-record', title: 'Salvage / flood / total loss record' },
-      { id: 'search-notes', title: 'Accident search notes / source limitations' },
-    ],
+    // One main check, scored on its own scale (Pass 0 / Minor −30 / Major −100 —
+    // see lib/report-utils.ts). The result is chosen from ACCIDENT_PRESETS.
+    items: [{ id: 'accident-record', title: 'Accident record result' }],
   },
   {
     id: 'exterior',
@@ -125,7 +120,6 @@ const SECTION_LIBRARY: SectionDef[] = [
       { id: 'floor-mats', title: 'Floor mat condition' },
       { id: 'interior-trim', title: 'Interior trim condition' },
       { id: 'infotainment', title: 'Infotainment / control condition' },
-      { id: 'ac-temp', title: 'AC temperature reading' },
       { id: 'ac-cooling', title: 'AC cooling performance' },
       { id: 'ac-vent', title: 'AC vent / control condition' },
       { id: 'ac-compressor', title: 'AC compressor check', tier: 'premium' },
@@ -244,10 +238,8 @@ const SECTION_LIBRARY: SectionDef[] = [
       { id: 'abs-fault', title: 'ABS warning / fault', tier: 'comprehensive' },
       { id: 'airbag-srs', title: 'Airbag / SRS warning / fault', tier: 'comprehensive' },
       { id: 'battery-health', title: 'Battery health check', tier: 'comprehensive' },
-      { id: 'battery-voltage', title: 'Battery voltage', tier: 'comprehensive' },
       { id: 'charging-system', title: 'Charging system', tier: 'comprehensive' },
       { id: 'obd-extended', title: 'Extended OBD fault-code review', tier: 'premium', hint: 'Stored / pending codes and readiness monitors.' },
-      { id: 'electrical-review', title: 'Battery & electrical system review', tier: 'premium' },
     ],
   },
   {
@@ -257,10 +249,8 @@ const SECTION_LIBRARY: SectionDef[] = [
     scored: false,
     kind: 'endoscopic',
     items: [
-      { id: 'cylinder-bore', title: 'Cylinder bore (where accessible)', tier: 'premium' },
-      { id: 'inner-cavities', title: 'Inner panel cavities', tier: 'premium' },
-      { id: 'hidden-corrosion', title: 'Hidden corrosion areas', tier: 'premium' },
-      { id: 'behind-trims', title: 'Behind trims / liners', tier: 'premium' },
+      { id: 'engine-endoscopic', title: 'Engine endoscopic inspection', tier: 'premium' },
+      { id: 'underbody-endoscopic', title: 'Underbody / hidden area endoscopic inspection', tier: 'premium' },
     ],
   },
 ]
@@ -297,7 +287,6 @@ export const PACKAGES: Record<PackageType, PackageConfig> = {
     transmissionEnabled: false,
     endoscopicEnabled: false,
     negotiationNotesEnabled: false,
-    summaryCallNotesEnabled: false,
   },
   comprehensive: {
     id: 'comprehensive',
@@ -328,7 +317,6 @@ export const PACKAGES: Record<PackageType, PackageConfig> = {
     transmissionEnabled: true,
     endoscopicEnabled: false,
     negotiationNotesEnabled: false,
-    summaryCallNotesEnabled: false,
   },
   premium: {
     id: 'premium',
@@ -357,7 +345,6 @@ export const PACKAGES: Record<PackageType, PackageConfig> = {
     transmissionEnabled: true,
     endoscopicEnabled: true,
     negotiationNotesEnabled: true,
-    summaryCallNotesEnabled: true,
   },
 }
 

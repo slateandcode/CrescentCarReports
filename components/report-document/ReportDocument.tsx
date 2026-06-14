@@ -30,9 +30,7 @@ export function ReportDocument({
 }) {
   const template = getTemplate(report.package_type)
   const present = new Set(template.sections.map((s) => s.id))
-  const hasNotes = Boolean(
-    report.inspector_summary || report.price_negotiation_notes || report.summary_call_notes,
-  )
+  const hasNotes = Boolean(report.inspector_summary || report.price_negotiation_notes)
   const showFinalNotes = template.recommendationEnabled || hasNotes
   const showGallery = (report.photos || []).length > 0
 

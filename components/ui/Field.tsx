@@ -19,6 +19,7 @@ export function TextField({
       <span className="label-base">
         {label}
         {optional && <span className="font-normal normal-case text-text-muted"> (optional)</span>}
+        {props.required && <span className="text-fail"> *</span>}
       </span>
       <input className="input-base" {...props} />
     </label>
@@ -55,6 +56,7 @@ export function SelectField({
       <span className="label-base">
         {label}
         {optional && <span className="font-normal normal-case text-text-muted"> (optional)</span>}
+        {props.required && <span className="text-fail"> *</span>}
       </span>
       <select className="input-base" {...props}>
         <option value="">{placeholder ?? 'Select…'}</option>

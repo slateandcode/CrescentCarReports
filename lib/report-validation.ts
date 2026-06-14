@@ -1,5 +1,5 @@
 import type { InspectionReport } from './report-types'
-import { getPackage, getScoredSections } from './report-templates'
+import { getPackage, getTemplate } from './report-templates'
 import { computeCounts, itemStatus, isIssue } from './report-utils'
 
 export interface ValidationResult {
@@ -14,7 +14,9 @@ const TYRE_ITEMS = new Set(['tyre-fl', 'tyre-fr', 'tyre-rl', 'tyre-rr'])
  * run client-side (to gate the button) and server-side (in the complete action).
  *
  * Brief rules enforced:
- *   • Every Minor / Major issue needs at least one evidence photo.
+ *   • Every Minor / Major issue needs at least one evidence photo (incl. the
+ *     endoscopic evidence section; Accident History is exempt — it's a records
+ *     search, not a physical finding).
  *   • A custom issue (Minor/Major with no common fault selected) needs a note.
  *   • Tyre items, once graded, need manufacturer, date code and a photo.
  *   • Recommendation + inspector notes are required where the package enables them.
@@ -24,27 +26,43 @@ export function validateForCompletion(report: InspectionReport): ValidationResul
   const pkg = getPackage(report.package_type)
 
   if (!report.package_type) errors.push('Package must be selected.')
+  // All vehicle-detail fields are mandatory before a report can be completed.
   if (!report.vehicle_make?.trim()) errors.push('Vehicle make is required.')
   if (!report.vehicle_model?.trim()) errors.push('Vehicle model is required.')
+  if (!report.vehicle_year?.trim()) errors.push('Vehicle year is required.')
+  if (!report.vin?.trim()) errors.push('VIN / chassis number is required.')
+  if (!report.plate_number?.trim()) errors.push('Plate number is required.')
+  if (!report.odometer?.trim()) errors.push('Odometer is required.')
+  if (!report.regional_specs?.trim()) errors.push('Regional specs are required.')
+  if (!report.transmission?.trim()) errors.push('Transmission is required.')
+  if (!report.fuel_type?.trim()) errors.push('Fuel type is required.')
+  if (!report.engine_size?.trim()) errors.push('Engine size is required.')
+  if (!report.exterior_colour?.trim()) errors.push('Exterior colour is required.')
+  if (!report.inspection_location?.trim()) errors.push('Inspection location is required.')
   if (!report.inspection_date) errors.push('Inspection date is required.')
+  if (!report.inspection_time?.trim()) errors.push('Inspection time is required.')
 
   const checklist = report.checklist || {}
   const counts = computeCounts(report.package_type, checklist)
   if (counts.completed === 0) errors.push('Complete at least some inspection items.')
 
-  // Per-item evidence rules.
+  // Per-item evidence rules. Iterate the full template (scored sections + the
+  // unscored endoscopic evidence section) so endoscopic findings are enforced too.
   let missingPhotos = 0
   let missingNotes = 0
   const tyreGaps: string[] = []
-  for (const section of getScoredSections(report.package_type)) {
+  for (const section of getTemplate(report.package_type).sections) {
     const sectionState = checklist[section.id] || {}
+    // Accident History is a records search — a Minor/Major result needs a detail
+    // (preset/note) but not a photo.
+    const photoExempt = section.kind === 'accident'
     for (const item of section.items) {
       const state = sectionState[item.id]
       const status = itemStatus(state)
       if (!status) continue
       const photos = state?.photos ?? []
       if (isIssue(status)) {
-        if (photos.length === 0) missingPhotos += 1
+        if (!photoExempt && photos.length === 0) missingPhotos += 1
         // A custom issue (no common fault) must carry a hand-written note — the
         // auto-generated comment does not count, so we check the manual flag /
         // inspector note rather than itemComment().

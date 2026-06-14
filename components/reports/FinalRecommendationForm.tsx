@@ -15,7 +15,6 @@ interface Patch {
   buyer_recommendation?: BuyerRecommendation
   inspector_summary?: string
   price_negotiation_notes?: string
-  summary_call_notes?: string
 }
 
 export function FinalRecommendationForm({
@@ -29,12 +28,10 @@ export function FinalRecommendationForm({
     buyer_recommendation: string | null
     inspector_summary: string | null
     price_negotiation_notes: string | null
-    summary_call_notes: string | null
   }
   flags: {
     recommendationEnabled: boolean
     negotiationNotesEnabled: boolean
-    summaryCallNotesEnabled: boolean
   }
   score: number | null
   suggested: BuyerRecommendation | null
@@ -107,20 +104,6 @@ export function FinalRecommendationForm({
         </label>
       )}
 
-      {flags.summaryCallNotesEnabled && (
-        <label className="block">
-          <span className="label-base">
-            20-minute summary call notes
-            <span className="font-normal normal-case text-text-muted"> (Premium)</span>
-          </span>
-          <textarea
-            value={values.summary_call_notes ?? ''}
-            onChange={(e) => onPatch({ summary_call_notes: e.target.value })}
-            placeholder="Notes from the inspector summary call with the buyer…"
-            className="input-base min-h-[88px] resize-y"
-          />
-        </label>
-      )}
     </div>
   )
 }

@@ -4,8 +4,8 @@ import { useRef } from 'react'
 import { AlertTriangle, Camera, Wand2 } from 'lucide-react'
 import type { ChecklistItemDef } from '@/lib/report-templates'
 import type { ChecklistItemState, ChecklistStatus, PhotoRef } from '@/lib/report-types'
-import { itemStatus, isIssue } from '@/lib/report-utils'
-import { generateComment } from '@/lib/issues'
+import { itemStatus, isIssue, decodeDot } from '@/lib/report-utils'
+import { generateComment, generateAccidentComment, ACCIDENT_PRESETS, type AccidentPreset } from '@/lib/issues'
 import { StatusSegmentedControl } from './StatusControl'
 import { PhotoUploader } from './PhotoUploader'
 import { cn } from '@/lib/utils'
@@ -20,6 +20,8 @@ interface Props {
   commonIssues?: string[]
   /** Per-corner tyre: manufacturer / date / tread + photos are mandatory. */
   tyre?: boolean
+  /** Accident-history single check: choose one preset result (Pass / Minor / Major). */
+  accident?: boolean
 }
 
 export function ChecklistItemCard({
@@ -30,6 +32,7 @@ export function ChecklistItemCard({
   onChange,
   commonIssues = [],
   tyre = false,
+  accident = false,
 }: Props) {
   const status = itemStatus(state)
   const showIssue = isIssue(status)
@@ -82,6 +85,24 @@ export function ChecklistItemCard({
   function setTyre(field: 'tyreManufacturer' | 'tyreDate' | 'tread', value: string) {
     onChange({ ...state, [field]: value })
   }
+  /** Accident: pick one preset (or null = Pass / no record). Sets status + comment. */
+  function selectAccidentPreset(preset: AccidentPreset | null) {
+    const next: ChecklistItemState = {
+      ...state,
+      status: preset ? preset.severity : 'pass',
+      commonIssues: preset ? [preset.label] : [],
+    }
+    if (!manualRef.current) {
+      next.comment = generateAccidentComment(preset)
+      next.commentManual = false
+    }
+    onChange(next)
+  }
+  function regenerateAccident() {
+    manualRef.current = false
+    const preset = ACCIDENT_PRESETS.find((p) => p.label === selected[0]) ?? null
+    onChange({ ...state, comment: generateAccidentComment(preset), commentManual: false })
+  }
   function addPhotos(newPhotos: PhotoRef[]) {
     onChange({ ...state, photos: [...photos, ...newPhotos] })
   }
@@ -95,6 +116,114 @@ export function ChecklistItemCard({
   const needsPhoto = showIssue && photos.length === 0
   const tyreIncomplete =
     tyre && Boolean(status) && (!state.tyreManufacturer?.trim() || !state.tyreDate?.trim() || photos.length === 0)
+
+  // Accident History: a single check chosen from preset findings. Photos are
+  // optional here (it's a records search, not a physical finding).
+  if (accident) {
+    const selectedLabel = selected[0]
+    const optionBase =
+      'flex items-center justify-between gap-2 rounded-input border px-3 py-2 text-left text-sm transition-colors'
+    return (
+      <div
+        className={cn(
+          'rounded-input border bg-surface p-3 transition-colors',
+          status === 'major' ? 'border-fail/40' : status === 'minor' ? 'border-attention/40' : 'border-border',
+        )}
+      >
+        <p className="mb-2.5 text-sm font-medium text-text-primary">{item.title}</p>
+
+        <div className="grid grid-cols-1 gap-1.5">
+          <button
+            type="button"
+            onClick={() => selectAccidentPreset(null)}
+            className={cn(
+              optionBase,
+              status === 'pass'
+                ? 'border-accent bg-accent-muted text-text-primary'
+                : 'border-border text-text-secondary hover:border-border-hover',
+            )}
+          >
+            No accident record found (Pass)
+          </button>
+          {ACCIDENT_PRESETS.map((p) => {
+            const active = selectedLabel === p.label
+            return (
+              <button
+                key={p.label}
+                type="button"
+                onClick={() => selectAccidentPreset(p)}
+                className={cn(
+                  optionBase,
+                  active
+                    ? 'border-accent bg-accent-muted text-text-primary'
+                    : 'border-border text-text-secondary hover:border-border-hover',
+                )}
+              >
+                <span>{p.label}</span>
+                <span
+                  className={cn(
+                    'shrink-0 text-xs font-semibold',
+                    p.severity === 'major' ? 'text-fail' : 'text-attention',
+                  )}
+                >
+                  [{p.severity === 'major' ? 'Major' : 'Minor'}]
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        {status && (
+          <div className="mt-3 space-y-3 border-t border-border pt-3">
+            <div>
+              <div className="flex items-center justify-between">
+                <p className="label-base !mb-0">Report comment</p>
+                <button
+                  type="button"
+                  onClick={regenerateAccident}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:text-accent-hover"
+                >
+                  <Wand2 size={12} /> Auto-write
+                </button>
+              </div>
+              <textarea
+                value={state.comment ?? ''}
+                onChange={(e) => setComment(e.target.value)}
+                placeholder="Customer-facing comment (auto-generated, editable)…"
+                className="input-base mt-1.5 min-h-[64px] resize-y text-sm"
+              />
+            </div>
+
+            <label className="block">
+              <span className="label-base">Inspector note (optional)</span>
+              <textarea
+                value={state.notes ?? ''}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Internal note / extra detail…"
+                className="input-base min-h-[48px] resize-y text-sm"
+              />
+            </label>
+
+            <div>
+              <p className="label-base flex items-center gap-1.5">
+                <Camera size={13} />
+                Photos
+                <span className="font-normal normal-case text-text-muted">(optional)</span>
+              </p>
+              <PhotoUploader
+                reportId={reportId}
+                photos={photos}
+                target={{ sectionId, itemId: item.id }}
+                onAdd={addPhotos}
+                onRemove={removePhoto}
+                onUpdate={updatePhoto}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div
@@ -133,6 +262,12 @@ export function ChecklistItemCard({
               placeholder="e.g. 0419"
               className="input-base text-sm"
             />
+            {/* Live preview of how the DOT decodes on the customer report. */}
+            {state.tyreDate?.trim() && decodeDot(state.tyreDate) !== state.tyreDate.trim() && (
+              <span className="mt-1 block text-xs text-text-muted">
+                Shows on report as: {decodeDot(state.tyreDate)}
+              </span>
+            )}
           </label>
           <label className="col-span-2 block">
             <span className="label-base">Tread depth (optional)</span>

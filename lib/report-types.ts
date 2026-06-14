@@ -145,7 +145,6 @@ export interface InspectionReport {
   buyer_recommendation: AnyRecommendation | null
   inspector_summary: string | null
   price_negotiation_notes: string | null
-  summary_call_notes: string | null
 
   checklist: ChecklistData
   critical_findings: CriticalFinding[]

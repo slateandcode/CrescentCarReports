@@ -135,7 +135,6 @@ function base(pkg: PackageType, ref: string): InspectionReport {
     buyer_recommendation: null,
     inspector_summary: null,
     price_negotiation_notes: null,
-    summary_call_notes: null,
     checklist: {},
     critical_findings: [],
     photos: [],
@@ -189,8 +188,6 @@ function buildSeed(): Map<string, InspectionReport> {
         'Overall a well-kept example with full Toyota service history. The front-right fender shows a documented respray, consistent with a minor past repair — no filler or structural concern detected. The engine bay has a power-steering seal weeping, and the front tyres are near the wear limit. Nothing here is a deal-breaker, but the repaint, tyres and seal are fair points for negotiation.',
       price_negotiation_notes:
         'Budget ~AED 1,500 for two front tyres and ~AED 900 for the power-steering seal reseal. The documented front-right repaint should support a further AED 3,000–4,000 off the asking price.',
-      summary_call_notes:
-        '20-minute call completed with the buyer on 20 May. Walked through the repaint history, tyre wear and the power-steering seep. Buyer is comfortable proceeding at a negotiated price.',
       completed_at: '2026-05-20T13:30:00.000Z',
       updated_at: '2026-05-20T13:30:00.000Z',
     },
@@ -288,8 +285,8 @@ function buildSeed(): Map<string, InspectionReport> {
         'obd-extended': { status: 'pass', comment: 'No stored or pending fault codes; readiness monitors complete.' },
       },
       endoscopic: {
-        'hidden-corrosion': { status: 'pass', comment: 'No hidden corrosion found in the inspected cavities.' },
-        'cylinder-bore': { status: 'pass', comment: 'Cylinder bores show normal cross-hatch, no scoring.' },
+        'engine-endoscopic': { status: 'pass', comment: 'Engine endoscopic inspection clear — no oil residue or carbon build-up in the inspected areas.' },
+        'underbody-endoscopic': { status: 'pass', comment: 'Underbody / hidden areas clear — no corrosion, moisture or concealed damage observed.' },
       },
     }),
   )

@@ -89,21 +89,27 @@ function ExteriorViewSvg({
   view,
   paint,
   flipX,
+  panelMap,
   svgClassName = 'h-auto w-full',
 }: {
   view: ExteriorView
   paint: PaintMap
   flipX?: boolean
-  /** Override sizing — the report caps height so both views fit one A4 sheet. */
+  /** Remap a view's panel-path id → the paint id to colour it with. Used to draw
+   *  the right side from the (left-keyed) side art by pointing each left panel at
+   *  its right-side paint condition. */
+  panelMap?: Record<string, string>
+  /** Override sizing — the report caps height so all views fit one A4 sheet. */
   svgClassName?: string
 }) {
   const width = Number(view.viewBox.split(' ')[2])
   const content = (
     <>
       {/* panel fills (each segmented from the drawing) */}
-      {Object.entries(view.panels).map(([id, d]) => (
-        <path key={id} d={d} fill={paint[id] ? PANEL_FILL[paint[id]] : PANEL_NEUTRAL} />
-      ))}
+      {Object.entries(view.panels).map(([id, d]) => {
+        const cond = paint[panelMap?.[id] ?? id]
+        return <path key={id} d={d} fill={cond ? PANEL_FILL[cond] : PANEL_NEUTRAL} />
+      })}
       {/* neutral wheels under the line-art */}
       {view.wheels?.map(([cx, cy, r], i) => <circle key={i} cx={cx} cy={cy} r={r} fill={WHEEL_CUT} />)}
       {/* traced line-art on top defines every edge */}
@@ -127,19 +133,41 @@ function ViewFrame({ label, children }: { label: string; children: ReactNode }) 
   )
 }
 
-/** Colour-coded exterior paint map — side profile + top-down.
- *  Both profiles are very wide and short, so we cap their height (rather than
- *  letting them fill the full document width) to keep the whole exterior page on
- *  a single A4 sheet — otherwise the paint-condition list orphans onto page 2. */
+/** The side art is keyed to the LEFT panels; to draw the right side we mirror the
+ *  geometry (flipX) and point each left panel at its right-side paint condition.
+ *  Front/rear bumpers are single (un-sided) panels, so they fall through to the
+ *  identity lookup. */
+const SIDE_RIGHT_MAP: Record<string, string> = {
+  'front-left-fender': 'front-right-fender',
+  'front-left-door': 'front-right-door',
+  'rear-left-door': 'rear-right-door',
+  'rear-left-quarter': 'rear-right-quarter',
+}
+
+/** Colour-coded exterior paint map — right side, top-down, left side, so the
+ *  customer can see if one side was repainted but not the other.
+ *
+ *  • Right side = the (left-keyed) side art mirrored + remapped to right panels.
+ *  • Top view   = front to the left, right-side panels along the top edge and
+ *                 left-side panels along the bottom edge, so it reads as a bridge
+ *                 between the right (above) and left (below) profiles.
+ *  • Left side  = the side art as drawn.
+ *
+ *  All three are wide and short, so we cap their height to keep the whole exterior
+ *  page on a single A4 sheet — otherwise the paint-condition list orphans onto
+ *  page 2. */
 export function ExteriorBodyMap({ paint }: { paint: PaintMap }) {
-  const viewCls = 'h-[112px] w-auto max-w-full'
+  const viewCls = 'h-[86px] w-auto max-w-full'
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-2">
-      <ViewFrame label="Side">
-        <ExteriorViewSvg view={SIDE_ART} paint={paint} svgClassName={viewCls} />
+    <div className="mx-auto flex max-w-2xl flex-col gap-1.5">
+      <ViewFrame label="Right side">
+        <ExteriorViewSvg view={SIDE_ART} paint={paint} flipX panelMap={SIDE_RIGHT_MAP} svgClassName={viewCls} />
       </ViewFrame>
-      <ViewFrame label="Top">
-        <ExteriorViewSvg view={TOP_ART} paint={paint} flipX svgClassName={viewCls} />
+      <ViewFrame label="Top view">
+        <ExteriorViewSvg view={TOP_ART} paint={paint} svgClassName={viewCls} />
+      </ViewFrame>
+      <ViewFrame label="Left side">
+        <ExteriorViewSvg view={SIDE_ART} paint={paint} svgClassName={viewCls} />
       </ViewFrame>
     </div>
   )

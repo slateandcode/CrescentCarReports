@@ -8,7 +8,7 @@ import { IS_DEMO } from '@/lib/env'
 import type { PhotoRef } from '@/lib/report-types'
 import { PhotoAdjuster } from './PhotoAdjuster'
 
-/** Large main vehicle photo with camera capture, preview, change & remove. */
+/** Large main vehicle photo (camera or gallery), with preview, change & remove. */
 export function MainImageUploader({
   reportId,
   url,
@@ -134,7 +134,6 @@ export function MainImageUploader({
         ref={inputRef}
         type="file"
         accept="image/*"
-        capture="environment"
         hidden
         onChange={(e) => handleFile(e.target.files?.[0])}
       />

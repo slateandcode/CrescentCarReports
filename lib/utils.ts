@@ -16,6 +16,18 @@ export function isPast(iso: string): boolean {
   return new Date(iso).getTime() < Date.now()
 }
 
+/**
+ * Normalise a stored phone number to the digits-only E.164 form wa.me needs.
+ * Phones are stored with spaces / "+" (e.g. "+971 50 123 4567"). A leading "00"
+ * international prefix is converted to no-prefix; everything non-digit is dropped.
+ * Returns '' when there are no digits.
+ */
+export function normalizePhoneForWa(phone?: string | null): string {
+  let digits = (phone ?? '').replace(/\D/g, '')
+  if (digits.startsWith('00')) digits = digits.slice(2)
+  return digits
+}
+
 /** Unguessable id for public report links (URL-safe, ~22 chars). */
 export function generatePublicId(): string {
   const bytes = new Uint8Array(16)

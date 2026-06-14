@@ -12,6 +12,11 @@ const config: Config = {
     './components/**/*.{js,ts,jsx,tsx,mdx}',
     './lib/**/*.{js,ts,jsx,tsx,mdx}',
   ],
+  // App shell supports a light/dark toggle (Settings → Preferences). The shell
+  // colours below resolve to CSS variables defined in app/globals.css, switched
+  // by the `data-theme` attribute on <html>. The printed report uses the fixed
+  // `doc-*` tokens and is unaffected by the theme.
+  darkMode: ['selector', '[data-theme="dark"]'],
   theme: {
     extend: {
       screens: {
@@ -21,18 +26,19 @@ const config: Config = {
         xs: '360px',
       },
       colors: {
-        background: '#0A0A0A',
-        surface: '#111111',
-        card: '#1A1A1A',
-        'card-hover': '#1F1F1F',
-        border: '#2A2A2A',
-        'border-hover': '#3A3A3A',
+        // Theme-switched shell colours (see :root / [data-theme] in globals.css).
+        background: 'var(--color-background)',
+        surface: 'var(--color-surface)',
+        card: 'var(--color-card)',
+        'card-hover': 'var(--color-card-hover)',
+        border: 'var(--color-border)',
+        'border-hover': 'var(--color-border-hover)',
         accent: '#FFC600',
         'accent-hover': '#E6B200',
         'accent-muted': 'rgba(255,198,0,0.08)',
-        'text-primary': '#FFFFFF',
-        'text-secondary': '#A0A0A0',
-        'text-muted': '#555555',
+        'text-primary': 'var(--color-text-primary)',
+        'text-secondary': 'var(--color-text-secondary)',
+        'text-muted': 'var(--color-text-muted)',
 
         // Light surfaces — used by the printable report document.
         'doc-bg': '#FFFFFF',
@@ -71,7 +77,7 @@ const config: Config = {
         tag: '6px',
       },
       boxShadow: {
-        card: '0 0 0 1px #2A2A2A',
+        card: '0 0 0 1px var(--color-border)',
         'card-hover': '0 0 0 1px #FFC600, 0 8px 32px rgba(255,198,0,0.06)',
         'input-focus': '0 0 0 3px rgba(255,198,0,0.2)',
         'input-error': '0 0 0 3px rgba(239,68,68,0.2)',

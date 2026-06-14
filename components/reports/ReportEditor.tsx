@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Settings2, User, Car, ClipboardList, Images } from 'lucide-react'
 import { getTemplate } from '@/lib/report-templates'
-import { computeCounts, overallScore, recommendationFromScore, normalizeRecommendation } from '@/lib/report-utils'
+import { computeCounts, overallScore, recommendationFromScore, normalizeRecommendation, vehicleTitle } from '@/lib/report-utils'
 import { validateForCompletion } from '@/lib/report-validation'
 import { saveReport, completeReport, type ReportPatch } from '@/app/(app)/reports/actions'
 import { PAINT_SECTION_ID } from '@/lib/issues'
@@ -15,6 +15,7 @@ import type {
   PhotoRef,
 } from '@/lib/report-types'
 import { REGIONAL_SPECS, TRANSMISSIONS, FUEL_TYPES, EMIRATES, VEHICLE_PLACEHOLDERS } from '@/lib/options'
+import { SLOT_TIMES, SLOTS } from '@/lib/booking-types'
 import { SectionAccordion } from './SectionAccordion'
 import { ChecklistSection } from './ChecklistSection'
 import { FinalRecommendationForm } from './FinalRecommendationForm'
@@ -50,7 +51,6 @@ type Form = Pick<
   | 'buyer_recommendation'
   | 'inspector_summary'
   | 'price_negotiation_notes'
-  | 'summary_call_notes'
 > & {
   checklist: ChecklistData
   photos: PhotoRef[]
@@ -89,7 +89,6 @@ export function ReportEditor({
     buyer_recommendation: normalizeRecommendation(report.buyer_recommendation) ?? null,
     inspector_summary: report.inspector_summary,
     price_negotiation_notes: report.price_negotiation_notes,
-    summary_call_notes: report.summary_call_notes,
     checklist: report.checklist || {},
     photos: report.photos || [],
   }))
@@ -265,12 +264,26 @@ export function ReportEditor({
                 value={form.inspection_date ?? ''}
                 onChange={(e) => setText('inspection_date', e.target.value)}
               />
-              <TextField
-                label="Inspection time"
-                type="time"
-                value={form.inspection_time ?? ''}
-                onChange={(e) => setText('inspection_time', e.target.value)}
-              />
+              <label className="block">
+                <span className="label-base">Inspection time</span>
+                <select
+                  className="input-base"
+                  value={form.inspection_time ?? ''}
+                  onChange={(e) => setText('inspection_time', e.target.value)}
+                >
+                  <option value="">Select…</option>
+                  {SLOT_TIMES.map((t) => (
+                    <option key={t} value={t}>
+                      {SLOTS[t]}
+                    </option>
+                  ))}
+                  {/* Preserve a legacy / off-slot time saved before slots were enforced. */}
+                  {form.inspection_time &&
+                    !(SLOT_TIMES as readonly string[]).includes(form.inspection_time) && (
+                      <option value={form.inspection_time}>{form.inspection_time}</option>
+                    )}
+                </select>
+              </label>
             </div>
 
             <div>
@@ -327,82 +340,84 @@ export function ReportEditor({
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <TextField
               label="Vehicle make"
+              required
               value={form.vehicle_make ?? ''}
               onChange={(e) => patch({ vehicle_make: e.target.value })}
               placeholder={VEHICLE_PLACEHOLDERS.make}
             />
             <TextField
               label="Vehicle model"
+              required
               value={form.vehicle_model ?? ''}
               onChange={(e) => patch({ vehicle_model: e.target.value })}
               placeholder={VEHICLE_PLACEHOLDERS.model}
             />
             <TextField
               label="Vehicle year"
-              optional
+              required
               value={form.vehicle_year ?? ''}
               onChange={(e) => setText('vehicle_year', e.target.value)}
               placeholder={VEHICLE_PLACEHOLDERS.year}
             />
             <TextField
               label="VIN / chassis number"
-              optional
+              required
               value={form.vin ?? ''}
               onChange={(e) => setText('vin', e.target.value)}
               placeholder={VEHICLE_PLACEHOLDERS.vin}
             />
             <TextField
               label="Plate number"
-              optional
+              required
               value={form.plate_number ?? ''}
               onChange={(e) => setText('plate_number', e.target.value)}
               placeholder={VEHICLE_PLACEHOLDERS.plate}
             />
             <TextField
               label="Odometer"
-              optional
+              required
               value={form.odometer ?? ''}
               onChange={(e) => setText('odometer', e.target.value)}
               placeholder={VEHICLE_PLACEHOLDERS.odometer}
             />
             <SelectField
               label="Regional specs"
-              optional
+              required
               options={REGIONAL_SPECS}
               value={form.regional_specs ?? ''}
               onChange={(e) => setText('regional_specs', e.target.value)}
             />
             <SelectField
               label="Transmission"
-              optional
+              required
               options={TRANSMISSIONS}
               value={form.transmission ?? ''}
               onChange={(e) => setText('transmission', e.target.value)}
             />
             <SelectField
               label="Fuel type"
-              optional
+              required
               options={FUEL_TYPES}
               value={form.fuel_type ?? ''}
               onChange={(e) => setText('fuel_type', e.target.value)}
             />
             <TextField
               label="Engine size"
-              optional
+              required
               value={form.engine_size ?? ''}
               onChange={(e) => setText('engine_size', e.target.value)}
               placeholder={VEHICLE_PLACEHOLDERS.engine}
             />
             <TextField
               label="Exterior colour"
-              optional
+              required
               value={form.exterior_colour ?? ''}
               onChange={(e) => setText('exterior_colour', e.target.value)}
               placeholder={VEHICLE_PLACEHOLDERS.colour}
             />
             <SelectField
               label="Inspection location"
-              optional
+              required
               options={EMIRATES}
               value={form.inspection_location ?? ''}
               onChange={(e) => setText('inspection_location', e.target.value)}
@@ -455,12 +470,10 @@ export function ReportEditor({
               buyer_recommendation: form.buyer_recommendation,
               inspector_summary: form.inspector_summary,
               price_negotiation_notes: form.price_negotiation_notes,
-              summary_call_notes: form.summary_call_notes,
             }}
             flags={{
               recommendationEnabled: template.recommendationEnabled,
               negotiationNotesEnabled: template.negotiationNotesEnabled,
-              summaryCallNotesEnabled: template.summaryCallNotesEnabled,
             }}
             score={score}
             suggested={suggested}
@@ -472,7 +485,6 @@ export function ReportEditor({
                     | 'buyer_recommendation'
                     | 'inspector_summary'
                     | 'price_negotiation_notes'
-                    | 'summary_call_notes'
                   >
                 >,
               )
@@ -518,6 +530,12 @@ export function ReportEditor({
         completing={completing}
         onSave={() => void doSave()}
         onComplete={onComplete}
+        customerPhone={form.customer_phone}
+        vehicleLabel={vehicleTitle({
+          vehicle_year: form.vehicle_year,
+          vehicle_make: form.vehicle_make,
+          vehicle_model: form.vehicle_model,
+        })}
       />
     </div>
   )

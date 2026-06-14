@@ -6,6 +6,7 @@ import { isPast } from '@/lib/utils'
 import { IS_DEMO } from '@/lib/env'
 import { LogoutButton } from '@/components/auth/LogoutButton'
 import { ProfileForm } from '@/components/settings/ProfileForm'
+import { PreferencesForm } from '@/components/settings/PreferencesForm'
 import { InviteForm } from '@/components/settings/InviteForm'
 import { TeamMembers } from '@/components/settings/TeamMembers'
 
@@ -48,6 +49,11 @@ export default async function SettingsPage() {
           </span>
           <LogoutButton />
         </div>
+      </section>
+
+      <section className="card-base p-5">
+        <h2 className="mb-4 text-lg font-semibold text-text-primary">Preferences</h2>
+        <PreferencesForm />
       </section>
 
       {isAdmin && (

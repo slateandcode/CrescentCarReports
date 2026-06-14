@@ -1,13 +1,13 @@
 'use client'
 
 import Link from 'next/link'
-import { Check, Cloud, CloudOff, Loader2, Save, Eye, BadgeCheck } from 'lucide-react'
+import { Check, Cloud, CloudOff, Loader2, Save, Eye, BadgeCheck, Send } from 'lucide-react'
 import type { ReportCounts, ReportStatus, PackageType } from '@/lib/report-types'
 import { completionPercent } from '@/lib/report-utils'
 import { getPackage } from '@/lib/report-templates'
 import { ReportStatusBadge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
-import { cn } from '@/lib/utils'
+import { cn, normalizePhoneForWa } from '@/lib/utils'
 
 export type SaveState = 'saved' | 'unsaved' | 'saving' | 'error'
 
@@ -87,7 +87,16 @@ export function ReportTopBar({
   )
 }
 
-/** Sticky bottom action bar: Save Draft, Preview, Mark Completed. */
+/** wa.me click-to-chat link with a pre-filled message (no file — the inspector
+ *  attaches the PDF by hand). Empty when there's no usable phone number. */
+function whatsappShareUrl(phone: string | null | undefined, vehicleLabel: string): string {
+  const digits = normalizePhoneForWa(phone)
+  if (!digits) return ''
+  const text = `Here is your ${vehicleLabel} inspection report from Crescent Car Check.`
+  return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`
+}
+
+/** Sticky bottom action bar: Save Draft, Preview, Mark Completed / Share. */
 export function StickyReportActions({
   reportId,
   status,
@@ -95,6 +104,8 @@ export function StickyReportActions({
   completing,
   onSave,
   onComplete,
+  customerPhone,
+  vehicleLabel,
 }: {
   reportId: string
   status: ReportStatus
@@ -102,7 +113,10 @@ export function StickyReportActions({
   completing: boolean
   onSave: () => void
   onComplete: () => void
+  customerPhone?: string | null
+  vehicleLabel: string
 }) {
+  const waUrl = whatsappShareUrl(customerPhone, vehicleLabel)
   return (
     <div className="no-print fixed inset-x-0 bottom-0 z-20 border-t border-border bg-surface/95 px-4 pb-[env(safe-area-inset-bottom)] pt-2.5 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center gap-2">
@@ -116,9 +130,26 @@ export function StickyReportActions({
           Preview
         </Link>
         {status === 'completed' ? (
-          <span className="ml-auto inline-flex items-center gap-1.5 px-2 text-sm font-semibold text-pass">
-            <Check size={16} /> Completed
-          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <span className="hidden items-center gap-1.5 px-1 text-sm font-semibold text-pass xs:inline-flex">
+              <Check size={16} /> Completed
+            </span>
+            {waUrl ? (
+              <a
+                href={waUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-primary h-11 text-sm"
+                title="Open WhatsApp to the customer with a pre-filled message (attach the PDF yourself)"
+              >
+                <Send size={16} />
+                <span className="hidden sm:inline">Share via WhatsApp</span>
+                <span className="sm:hidden">WhatsApp</span>
+              </a>
+            ) : (
+              <span className="px-2 text-xs text-text-muted">No customer phone on file</span>
+            )}
+          </div>
         ) : (
           <button onClick={onComplete} disabled={completing} className="btn-primary ml-auto h-11 flex-1 text-sm sm:flex-none">
             {completing ? <Spinner /> : <BadgeCheck size={16} />}

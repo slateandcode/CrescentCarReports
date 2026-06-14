@@ -1,10 +1,10 @@
 'use client'
 
 import { ClipboardCheck, Info } from 'lucide-react'
-import type { SectionDef } from '@/lib/report-templates'
+import type { SectionDef, ChecklistItemDef } from '@/lib/report-templates'
 import type { ChecklistItemState, ChecklistStatus, PaintCondition } from '@/lib/report-types'
 import { itemStatus, sectionScore, paintDeductionsFor } from '@/lib/report-utils'
-import { commonIssuesForSection } from '@/lib/issues'
+import { commonIssuesForItem } from '@/lib/issues'
 import { SectionAccordion } from './SectionAccordion'
 import { ChecklistItemCard } from './ChecklistItemCard'
 import { ExteriorPaintEditor } from './ExteriorPaintEditor'
@@ -16,20 +16,23 @@ const TYRE_IDS = new Set(['tyre-fl', 'tyre-fr', 'tyre-rl', 'tyre-rr'])
 /** Mini status tally + section score rendered in the accordion header. */
 function SectionHeaderBadge({
   state,
-  total,
+  sectionId,
+  items,
   scored,
   paintDeduction = 0,
 }: {
   state: SectionState
-  total: number
+  sectionId: string
+  /** Current template items — count only these, never orphaned stored keys. */
+  items: ChecklistItemDef[]
   scored: boolean
   /** Exterior only: extra deduction from non-original paint panels. */
   paintDeduction?: number
 }) {
   const tally: Record<ChecklistStatus, number> = { pass: 0, minor: 0, major: 0, na: 0 }
   let done = 0
-  for (const s of Object.values(state)) {
-    const st = itemStatus(s)
+  for (const item of items) {
+    const st = itemStatus(state[item.id])
     if (st) {
       tally[st] += 1
       done += 1
@@ -41,11 +44,11 @@ function SectionHeaderBadge({
       {tally.minor > 0 && <span className="text-attention">{tally.minor} minor</span>}
       {scored && done > 0 && (
         <span className="font-semibold text-text-secondary">
-          {Math.max(0, sectionScore(state) - paintDeduction)}/100
+          {Math.max(0, sectionScore(state, sectionId) - paintDeduction)}/100
         </span>
       )}
       <span className="text-text-muted">
-        {done}/{total}
+        {done}/{items.length}
       </span>
     </span>
   )
@@ -67,9 +70,9 @@ export function ChecklistSection({
   paintState?: SectionState
   onPaintChange?: (panelId: string, condition: PaintCondition) => void
 }) {
-  const commonIssues = commonIssuesForSection(section.id)
   const isExterior = section.kind === 'exterior'
   const isTyres = section.kind === 'tyres'
+  const isAccident = section.kind === 'accident'
 
   return (
     <SectionAccordion
@@ -79,7 +82,8 @@ export function ChecklistSection({
       badge={
         <SectionHeaderBadge
           state={state}
-          total={section.items.length}
+          sectionId={section.id}
+          items={section.items}
           scored={Boolean(section.scored)}
           paintDeduction={isExterior ? paintDeductionsFor(paintState) : 0}
         />
@@ -110,8 +114,9 @@ export function ChecklistSection({
               item={item}
               state={state[item.id] ?? {}}
               onChange={(next) => onItemChange(item.id, next)}
-              commonIssues={commonIssues}
+              commonIssues={commonIssuesForItem(section.id, item.id)}
               tyre={isTyres && TYRE_IDS.has(item.id)}
+              accident={isAccident}
             />
           ))}
         </div>

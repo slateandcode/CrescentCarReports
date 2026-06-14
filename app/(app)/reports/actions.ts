@@ -88,7 +88,6 @@ export interface ReportPatch {
   buyer_recommendation?: string | null
   inspector_summary?: string | null
   price_negotiation_notes?: string | null
-  summary_call_notes?: string | null
   checklist?: ChecklistData
   critical_findings?: CriticalFinding[]
   photos?: PhotoRef[]

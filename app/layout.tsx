@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
+import { cookies } from 'next/headers'
 import './globals.css'
 
 const inter = Inter({
@@ -30,9 +31,12 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Theme is persisted in a cookie so the server can render the right palette on
+  // the first paint — no client boot script, no dark→light flash. Default: dark.
+  const theme = (await cookies()).get('theme')?.value === 'light' ? 'light' : 'dark'
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" data-theme={theme} className={inter.variable}>
       <body>{children}</body>
     </html>
   )
