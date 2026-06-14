@@ -89,12 +89,17 @@ function ExteriorViewSvg({
   view,
   paint,
   flipX,
+  flipY,
   panelMap,
   svgClassName = 'h-auto w-full',
 }: {
   view: ExteriorView
   paint: PaintMap
+  /** Mirror horizontally (front ↔ rear). */
   flipX?: boolean
+  /** Mirror vertically (roof ↔ underside) — used to "unfold" the left side below
+   *  the top view, matching the client's layout. */
+  flipY?: boolean
   /** Remap a view's panel-path id → the paint id to colour it with. Used to draw
    *  the right side from the (left-keyed) side art by pointing each left panel at
    *  its right-side paint condition. */
@@ -102,7 +107,7 @@ function ExteriorViewSvg({
   /** Override sizing — the report caps height so all views fit one A4 sheet. */
   svgClassName?: string
 }) {
-  const width = Number(view.viewBox.split(' ')[2])
+  const [, , width, height] = view.viewBox.split(' ').map(Number)
   const content = (
     <>
       {/* panel fills (each segmented from the drawing) */}
@@ -116,10 +121,12 @@ function ExteriorViewSvg({
       <path d={view.line} fill={INK} fillRule="evenodd" />
     </>
   )
+  const tx = flipX ? width : 0
+  const ty = flipY ? height : 0
+  const transform = flipX || flipY ? `translate(${tx},${ty}) scale(${flipX ? -1 : 1},${flipY ? -1 : 1})` : null
   return (
     <svg viewBox={view.viewBox} className={svgClassName} role="img">
-      {/* flipX mirrors the view so its front points the same way as the side view */}
-      {flipX ? <g transform={`translate(${width},0) scale(-1,1)`}>{content}</g> : content}
+      {transform ? <g transform={transform}>{content}</g> : content}
     </svg>
   )
 }
@@ -144,14 +151,14 @@ const SIDE_RIGHT_MAP: Record<string, string> = {
   'rear-left-quarter': 'rear-right-quarter',
 }
 
-/** Colour-coded exterior paint map — right side, top-down, left side, so the
- *  customer can see if one side was repainted but not the other.
+/** Colour-coded exterior paint map laid out as the client's "unfold": right side
+ *  on top, top-down in the middle, left side below — every view with the nose
+ *  pointing the same way (right), and the left side mirrored vertically so it
+ *  reads as folding down off the top view.
  *
- *  • Right side = the (left-keyed) side art mirrored + remapped to right panels.
- *  • Top view   = front to the left, right-side panels along the top edge and
- *                 left-side panels along the bottom edge, so it reads as a bridge
- *                 between the right (above) and left (below) profiles.
- *  • Left side  = the side art as drawn.
+ *  • Right side = the side art (nose right), panels remapped to right-side paint.
+ *  • Top view   = mirrored so the nose points right, matching the side profiles.
+ *  • Left side  = the side art flipped vertically (unfolded downward).
  *
  *  All three are wide and short, so we cap their height to keep the whole exterior
  *  page on a single A4 sheet — otherwise the paint-condition list orphans onto
@@ -161,13 +168,13 @@ export function ExteriorBodyMap({ paint }: { paint: PaintMap }) {
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-1.5">
       <ViewFrame label="Right side">
-        <ExteriorViewSvg view={SIDE_ART} paint={paint} flipX panelMap={SIDE_RIGHT_MAP} svgClassName={viewCls} />
+        <ExteriorViewSvg view={SIDE_ART} paint={paint} panelMap={SIDE_RIGHT_MAP} svgClassName={viewCls} />
       </ViewFrame>
       <ViewFrame label="Top view">
-        <ExteriorViewSvg view={TOP_ART} paint={paint} svgClassName={viewCls} />
+        <ExteriorViewSvg view={TOP_ART} paint={paint} flipX svgClassName={viewCls} />
       </ViewFrame>
       <ViewFrame label="Left side">
-        <ExteriorViewSvg view={SIDE_ART} paint={paint} svgClassName={viewCls} />
+        <ExteriorViewSvg view={SIDE_ART} paint={paint} flipY svgClassName={viewCls} />
       </ViewFrame>
     </div>
   )
