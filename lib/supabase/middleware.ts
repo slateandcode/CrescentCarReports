@@ -7,6 +7,9 @@ const PUBLIC_PREFIXES = ['/login', '/invite', '/forgot-password', '/auth', '/ext
 
 /** Inactivity window — a session idle longer than this is force-logged-out. */
 const INACTIVITY_LIMIT_MS = 14 * 24 * 60 * 60 * 1000 // 14 days
+/** Auth-cookie lifetime, re-stamped on every authenticated request → a sliding
+ *  14-day "remember me" window that matches INACTIVITY_LIMIT_MS. */
+const AUTH_COOKIE_MAX_AGE_S = 14 * 24 * 60 * 60 // 14 days, in seconds
 
 /** Cookie that timestamps the last status/activity DB check. */
 const HEARTBEAT_COOKIE = 'ccr_session_hb'
@@ -29,6 +32,41 @@ function redirectWithCookies(url: URL, response: NextResponse): NextResponse {
     redirectRes.cookies.set(cookie.name, cookie.value, cookie)
   }
   return redirectRes
+}
+
+/**
+ * "Remember me": re-emit the Supabase auth cookies as SERVER-set (HTTP
+ * Set-Cookie) with a fresh 14-day max-age on every authenticated request.
+ *
+ * The Supabase BROWSER client writes these cookies via document.cookie (on
+ * sign-in and client-side token refresh). Safari's ITP caps script-written
+ * cookies to 7 days regardless of their max-age, which silently logged users
+ * out ~a week after signing in. Cookies written server-side are exempt from that
+ * cap, so re-stamping them here keeps the session alive — and because it runs on
+ * every request, the 14-day window slides with activity.
+ *
+ * Skips any cookie Supabase already refreshed onto this response (so a freshly
+ * rotated token isn't clobbered with the stale request value). httpOnly stays
+ * false to match the @supabase/ssr default so the browser client can still read
+ * them.
+ */
+function rememberAuthCookies(request: NextRequest, response: NextResponse) {
+  const alreadySet = new Set(response.cookies.getAll().map((c) => c.name))
+  for (const cookie of request.cookies.getAll()) {
+    if (
+      cookie.name.startsWith('sb-') &&
+      cookie.name.includes('-auth-token') &&
+      !alreadySet.has(cookie.name)
+    ) {
+      response.cookies.set(cookie.name, cookie.value, {
+        httpOnly: false,
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+        path: '/',
+        maxAge: AUTH_COOKIE_MAX_AGE_S,
+      })
+    }
+  }
 }
 
 /**
@@ -153,6 +191,7 @@ export async function updateSession(request: NextRequest) {
 
     // Already authenticated but sitting on an auth page → send to dashboard.
     if (pathname === '/login' || pathname === '/') {
+      rememberAuthCookies(request, response)
       const url = request.nextUrl.clone()
       url.pathname = '/dashboard'
       url.search = ''
@@ -160,5 +199,7 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
+  // Keep the signed-in session alive past Safari's 7-day script-cookie cap.
+  if (userId) rememberAuthCookies(request, response)
   return response
 }
