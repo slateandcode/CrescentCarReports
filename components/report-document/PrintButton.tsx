@@ -8,7 +8,21 @@ import { Download, Loader2, Printer } from 'lucide-react'
  * the browser print dialog). If that fails — e.g. the host has no Chrome binary
  * — it falls back to the browser's own print/save dialog.
  */
-export function PrintButton({ reportId, reference, className }: { reportId: string; reference: string; className?: string }) {
+export function PrintButton({
+  reportId,
+  reference,
+  className,
+  label = 'Download PDF',
+  busyLabel = 'Generating…',
+  fallbackLabel = 'Print / Save PDF',
+}: {
+  reportId: string
+  reference: string
+  className?: string
+  label?: string
+  busyLabel?: string
+  fallbackLabel?: string
+}) {
   const [busy, setBusy] = useState(false)
   const [fallback, setFallback] = useState(false)
 
@@ -68,7 +82,7 @@ export function PrintButton({ reportId, reference, className }: { reportId: stri
       ) : (
         <Download size={16} />
       )}
-      {busy ? 'Generating…' : fallback ? 'Print / Save PDF' : 'Download PDF'}
+      {busy ? busyLabel : fallback ? fallbackLabel : label}
     </button>
   )
 }

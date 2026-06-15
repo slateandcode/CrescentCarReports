@@ -42,6 +42,13 @@ export function validateForCompletion(report: InspectionReport): ValidationResul
   if (!report.inspection_date) errors.push('Inspection date is required.')
   if (!report.inspection_time?.trim()) errors.push('Inspection time is required.')
 
+  // Photo galleries are mandatory: at least one Exterior and one Interior photo.
+  const galleryPhotos = report.photos || []
+  if (!galleryPhotos.some((p) => p.sectionId === 'gallery-exterior'))
+    errors.push('At least one Exterior photo is required.')
+  if (!galleryPhotos.some((p) => p.sectionId === 'gallery-interior'))
+    errors.push('At least one Interior photo is required.')
+
   const checklist = report.checklist || {}
   const counts = computeCounts(report.package_type, checklist)
   if (counts.completed === 0) errors.push('Complete at least some inspection items.')

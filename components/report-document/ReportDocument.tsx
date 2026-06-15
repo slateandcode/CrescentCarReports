@@ -9,7 +9,7 @@ import {
   ReportTyresBrakesPage,
   ScoredSectionPage,
   ReportEndoscopicPage,
-  ReportGeneralGalleryPage,
+  ReportPhotoGalleryPage,
   ReportFinalNotesPage,
   ReportDisclaimerPage,
 } from './ReportPages'
@@ -32,7 +32,11 @@ export function ReportDocument({
   const present = new Set(template.sections.map((s) => s.id))
   const hasNotes = Boolean(report.inspector_summary || report.price_negotiation_notes)
   const showFinalNotes = template.recommendationEnabled || hasNotes
-  const showGallery = (report.photos || []).length > 0
+  // Split galleries by section tag. Legacy/untagged photos (older reports used a
+  // single "general" gallery) fold into Exterior so nothing is lost.
+  const allPhotos = report.photos || []
+  const interiorPhotos = allPhotos.filter((p) => p.sectionId === 'gallery-interior')
+  const exteriorPhotos = allPhotos.filter((p) => p.sectionId !== 'gallery-interior')
 
   let n = 0
   const next = () => String(++n).padStart(2, '0')
@@ -59,7 +63,14 @@ export function ReportDocument({
     pages.push(<ScoredSectionPage key="electrical" report={report} sectionId="electrical-obd" index={next()} />)
   if (present.has('endoscopic'))
     pages.push(<ReportEndoscopicPage key="endoscopic" report={report} index={next()} />)
-  if (showGallery) pages.push(<ReportGeneralGalleryPage key="gallery" report={report} index={next()} />)
+  if (exteriorPhotos.length > 0)
+    pages.push(
+      <ReportPhotoGalleryPage key="gallery-exterior" report={report} index={next()} title="Exterior Photos" photos={exteriorPhotos} />,
+    )
+  if (interiorPhotos.length > 0)
+    pages.push(
+      <ReportPhotoGalleryPage key="gallery-interior" report={report} index={next()} title="Interior Photos" photos={interiorPhotos} />,
+    )
   if (showFinalNotes)
     pages.push(<ReportFinalNotesPage key="notes" report={report} template={template} index={next()} />)
   pages.push(<ReportDisclaimerPage key="disclaimer" report={report} index={next()} />)

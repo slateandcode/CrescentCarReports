@@ -185,7 +185,10 @@ function joinList(items: string[]): string {
 
 /** Lower-case the first character of a fault label for mid-sentence use. */
 function lower(s: string): string {
-  return s ? s.charAt(0).toLowerCase() + s.slice(1) : s
+  if (!s) return s
+  // Don't de-capitalise a leading acronym (AC, VIN, ABS, SRS…): "aC vent" reads wrong.
+  if (/^[A-Z]{2,}/.test(s)) return s
+  return s.charAt(0).toLowerCase() + s.slice(1)
 }
 
 /** Rough plural/uncountable check on the last word ("scratches"→plural, "leak"→singular). */

@@ -1038,17 +1038,26 @@ export function ReportEndoscopicPage({ report, index }: { report: InspectionRepo
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// General Photo Gallery (extra photos only)
+// Photo Gallery — split into Exterior / Interior (extra photos only)
 // ════════════════════════════════════════════════════════════════════════
-export function ReportGeneralGalleryPage({ report, index }: { report: InspectionReport; index: string }) {
-  const photos = report.photos || []
+export function ReportPhotoGalleryPage({
+  report,
+  index,
+  title,
+  photos,
+}: {
+  report: InspectionReport
+  index: string
+  title: string
+  photos: PhotoRef[]
+}) {
   return (
     <DocPage watermark={photos.length === 0}>
       <DocHeader label="Photo Gallery" />
       <div className="flex flex-1 flex-col px-12 pt-9 pb-14">
-        <DocSectionTitle index={index}>General Photo Gallery</DocSectionTitle>
+        <DocSectionTitle index={index}>{title}</DocSectionTitle>
         {photos.length === 0 ? (
-          <EmptySection label="General photos" />
+          <EmptySection label={title} />
         ) : (
           <div className="grid grid-cols-3 gap-3">
             {photos.map((p) => (
@@ -1068,7 +1077,7 @@ export function ReportGeneralGalleryPage({ report, index }: { report: Inspection
           </div>
         )}
       </div>
-      <DocFooter reference={report.report_reference} note="Photo gallery" />
+      <DocFooter reference={report.report_reference} note={title} />
     </DocPage>
   )
 }

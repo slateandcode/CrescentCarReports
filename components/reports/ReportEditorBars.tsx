@@ -1,12 +1,13 @@
 'use client'
 
 import Link from 'next/link'
-import { Check, Cloud, CloudOff, Loader2, Save, Eye, BadgeCheck, Send } from 'lucide-react'
+import { Check, Cloud, CloudOff, Loader2, Save, Eye, Square, Send } from 'lucide-react'
 import type { ReportCounts, ReportStatus, PackageType } from '@/lib/report-types'
 import { completionPercent } from '@/lib/report-utils'
 import { getPackage } from '@/lib/report-templates'
 import { ReportStatusBadge } from '@/components/ui/Badge'
 import { Spinner } from '@/components/ui/Spinner'
+import { PrintButton } from '@/components/report-document/PrintButton'
 import { cn, normalizePhoneForWa } from '@/lib/utils'
 
 export type SaveState = 'saved' | 'unsaved' | 'saving' | 'error'
@@ -96,67 +97,98 @@ function whatsappShareUrl(phone: string | null | undefined, vehicleLabel: string
   return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`
 }
 
-/** Sticky bottom action bar: Save Draft, Preview, Mark Completed / Share. */
+/** Shared look for the four action buttons (icon stacked over a small label). */
+const ACTION_BTN =
+  'flex h-14 flex-col items-center justify-center gap-1 rounded-input border border-border bg-card text-[11px] font-semibold text-text-secondary transition-colors hover:border-border-hover hover:bg-card-hover hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50'
+
+/**
+ * Sticky bottom action bar. Top: a Completed tick the inspector toggles when the
+ * report is finished — grey when draft, gold when completed, and reversible.
+ * Bottom: the four actions Save · Preview · Download · Send. The workflow is
+ * finish → tick Completed → Preview → Download the PDF → Send via WhatsApp and
+ * attach the downloaded PDF by hand (wa.me can't attach files itself).
+ */
 export function StickyReportActions({
   reportId,
+  reference,
   status,
   saving,
   completing,
   onSave,
   onComplete,
+  onReopen,
   customerPhone,
   vehicleLabel,
 }: {
   reportId: string
+  reference: string
   status: ReportStatus
   saving: boolean
   completing: boolean
   onSave: () => void
   onComplete: () => void
+  onReopen: () => void
   customerPhone?: string | null
   vehicleLabel: string
 }) {
+  const completed = status === 'completed'
   const waUrl = whatsappShareUrl(customerPhone, vehicleLabel)
   return (
     <div className="no-print fixed inset-x-0 bottom-0 z-20 border-t border-border bg-surface/95 px-4 pb-[env(safe-area-inset-bottom)] pt-2.5 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center gap-2">
-        <button onClick={onSave} disabled={saving} className="btn-secondary h-11 flex-1 text-sm sm:flex-none">
-          {saving ? <Spinner /> : <Save size={16} />}
-          <span className="hidden sm:inline">Save Draft</span>
-          <span className="sm:hidden">Save</span>
+      <div className="mx-auto max-w-6xl space-y-2">
+        {/* Completed tick — grey when draft, gold when completed. Reversible. */}
+        <button
+          onClick={completed ? onReopen : onComplete}
+          disabled={completing}
+          aria-pressed={completed}
+          className={cn(
+            'flex h-11 w-full items-center justify-center gap-2 rounded-input border text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60',
+            completed
+              ? 'border-accent bg-accent text-black hover:bg-accent-hover'
+              : 'border-border bg-card text-text-secondary hover:border-border-hover hover:text-text-primary',
+          )}
+          title={completed ? 'Tap to reopen this report for edits' : 'Tick when the report is finished'}
+        >
+          {completing ? <Spinner /> : completed ? <Check size={16} /> : <Square size={16} />}
+          Completed
         </button>
-        <Link href={`/reports/${reportId}/preview`} className="btn-secondary h-11 flex-1 text-sm sm:flex-none">
-          <Eye size={16} />
-          Preview
-        </Link>
-        {status === 'completed' ? (
-          <div className="ml-auto flex items-center gap-2">
-            <span className="hidden items-center gap-1.5 px-1 text-sm font-semibold text-pass xs:inline-flex">
-              <Check size={16} /> Completed
-            </span>
-            {waUrl ? (
-              <a
-                href={waUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-primary h-11 text-sm"
-                title="Open WhatsApp to the customer with a pre-filled message (attach the PDF yourself)"
-              >
-                <Send size={16} />
-                <span className="hidden sm:inline">Share via WhatsApp</span>
-                <span className="sm:hidden">WhatsApp</span>
-              </a>
-            ) : (
-              <span className="px-2 text-xs text-text-muted">No customer phone on file</span>
-            )}
-          </div>
-        ) : (
-          <button onClick={onComplete} disabled={completing} className="btn-primary ml-auto h-11 flex-1 text-sm sm:flex-none">
-            {completing ? <Spinner /> : <BadgeCheck size={16} />}
-            <span className="hidden sm:inline">Mark Completed</span>
-            <span className="sm:hidden">Complete</span>
+
+        {/* Four actions: Save · Preview · Download · Send. */}
+        <div className="grid grid-cols-4 gap-2">
+          <button onClick={onSave} disabled={saving} className={ACTION_BTN}>
+            {saving ? <Spinner /> : <Save size={16} />}
+            Save
           </button>
-        )}
+          <Link href={`/reports/${reportId}/preview`} className={ACTION_BTN}>
+            <Eye size={16} />
+            Preview
+          </Link>
+          <PrintButton
+            reportId={reportId}
+            reference={reference}
+            label="Download"
+            busyLabel="…"
+            fallbackLabel="Print"
+            className={ACTION_BTN}
+          />
+          {waUrl ? (
+            <a
+              href={waUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={ACTION_BTN}
+              title="Open WhatsApp to the customer with a pre-filled message (attach the PDF yourself)"
+            >
+              <Send size={16} />
+              Send
+            </a>
+          ) : (
+            <button type="button" disabled className={ACTION_BTN} title="No customer phone on file">
+              <Send size={16} />
+              Send
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

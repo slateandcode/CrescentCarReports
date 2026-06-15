@@ -1,11 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Settings2, User, Car, ClipboardList, Images } from 'lucide-react'
+import { Settings2, User, Car, ClipboardList, Armchair } from 'lucide-react'
 import { getTemplate } from '@/lib/report-templates'
 import { computeCounts, overallScore, recommendationFromScore, normalizeRecommendation, vehicleTitle } from '@/lib/report-utils'
 import { validateForCompletion } from '@/lib/report-validation'
-import { saveReport, completeReport, type ReportPatch } from '@/app/(app)/reports/actions'
+import { saveReport, completeReport, reopenReport, type ReportPatch } from '@/app/(app)/reports/actions'
 import { PAINT_SECTION_ID } from '@/lib/issues'
 import type {
   InspectionReport,
@@ -220,10 +220,23 @@ export function ReportEditor({
     setStatus('completed')
   }
 
+  // Reverse the Completed tick — move a completed report back to draft.
+  async function onReopen() {
+    setCompleteError(null)
+    setCompleting(true)
+    const result = await reopenReport(report.id)
+    setCompleting(false)
+    if (!result.ok) {
+      setCompleteError(result.error || 'Could not reopen the report.')
+      return
+    }
+    setStatus('draft')
+  }
+
   const validation = validateForCompletion({ ...report, ...form, status } as InspectionReport)
 
   return (
-    <div className="pb-24">
+    <div className="pb-36">
       <ReportTopBar
         reference={report.report_reference}
         pkg={report.package_type}
@@ -445,12 +458,25 @@ export function ReportEditor({
           </div>
         </div>
 
-        {/* General photos */}
-        <SectionAccordion title="General Photo Gallery" subtitle="Extra photos for the report" icon={<Images size={18} />}>
+        {/* Photo galleries — split into Exterior + Interior so inspectors upload
+            in an organised way. Both are required to mark the report completed
+            (see validateForCompletion). */}
+        <SectionAccordion title="Exterior Photos" subtitle="Required — outside of the vehicle" icon={<Car size={18} />} defaultOpen>
           <PhotoUploader
             reportId={report.id}
-            photos={form.photos}
-            target={{ sectionId: 'general' }}
+            photos={form.photos.filter((p) => p.sectionId === 'gallery-exterior')}
+            target={{ sectionId: 'gallery-exterior' }}
+            onAdd={(newPhotos) => setForm((prev) => ({ ...prev, photos: [...prev.photos, ...newPhotos] }))}
+            onRemove={(photo) => patch({ photos: form.photos.filter((p) => p.id !== photo.id) })}
+            onUpdate={(photo) => patch({ photos: form.photos.map((p) => (p.id === photo.id ? photo : p)) })}
+            label="Add photo"
+          />
+        </SectionAccordion>
+        <SectionAccordion title="Interior Photos" subtitle="Required — inside the cabin" icon={<Armchair size={18} />} defaultOpen>
+          <PhotoUploader
+            reportId={report.id}
+            photos={form.photos.filter((p) => p.sectionId === 'gallery-interior')}
+            target={{ sectionId: 'gallery-interior' }}
             onAdd={(newPhotos) => setForm((prev) => ({ ...prev, photos: [...prev.photos, ...newPhotos] }))}
             onRemove={(photo) => patch({ photos: form.photos.filter((p) => p.id !== photo.id) })}
             onUpdate={(photo) => patch({ photos: form.photos.map((p) => (p.id === photo.id ? photo : p)) })}
@@ -525,11 +551,13 @@ export function ReportEditor({
 
       <StickyReportActions
         reportId={report.id}
+        reference={report.report_reference}
         status={status}
         saving={saving}
         completing={completing}
         onSave={() => void doSave()}
         onComplete={onComplete}
+        onReopen={onReopen}
         customerPhone={form.customer_phone}
         vehicleLabel={vehicleTitle({
           vehicle_year: form.vehicle_year,
