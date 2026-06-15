@@ -1,6 +1,6 @@
 // Dropdown option sets for the vehicle / report forms. Kept small and UAE-relevant.
 
-export const REGIONAL_SPECS = ['GCC', 'Import', 'Unknown'] as const
+export const REGIONAL_SPECS = ['GCC', 'American', 'Import', 'Unknown'] as const
 export const TRANSMISSIONS = ['Automatic', 'Manual', 'CVT', 'Dual-Clutch'] as const
 export const FUEL_TYPES = ['Petrol', 'Diesel', 'Hybrid', 'Electric'] as const
 
