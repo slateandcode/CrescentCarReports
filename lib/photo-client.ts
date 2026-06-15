@@ -1,7 +1,7 @@
 'use client'
 
 import { createClient } from '@/lib/supabase/client'
-import { PHOTO_BUCKET } from '@/lib/utils'
+import { PHOTO_BUCKET, pathFromStorageUrl } from '@/lib/utils'
 import type { PhotoRef } from '@/lib/report-types'
 
 function uuid(): string {
@@ -21,6 +21,14 @@ const COMPRESS_MIN_BYTES = 400_000
 const COMPRESS_MAX_EDGE = 2000
 /** JPEG quality for the re-encode. */
 const COMPRESS_QUALITY = 0.85
+
+/**
+ * Signed-URL TTL (seconds). The bucket is PRIVATE (migration 013), so every
+ * rendered photo URL is a short-lived signed URL. 24h comfortably outlives an
+ * editing/preview session and the PDF render; it MUST match SIGNED_URL_TTL_SECONDS
+ * in lib/photo-sign.ts so client-minted and server-re-signed URLs behave alike.
+ */
+const SIGNED_URL_TTL_SECONDS = 60 * 60 * 24
 
 /**
  * Downscale + re-encode a camera photo in the browser before upload. A modern
@@ -86,18 +94,28 @@ export async function uploadPhoto(file: File, target: UploadTarget): Promise<Pho
     .upload(path, upload, { contentType: upload.type, upsert: false })
   if (uploadErr) throw new Error(uploadErr.message)
 
-  const {
-    data: { publicUrl },
-  } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path)
+  // Bucket is PRIVATE (migration 013): mint a signed URL so the editor can show
+  // the photo immediately. The durable `path` (below) is what rendering re-signs
+  // from — this URL is only good until the TTL lapses. Throw on failure so the
+  // inspector sees that the upload didn't fully succeed.
+  const { data: signed, error: signErr } = await supabase.storage
+    .from(PHOTO_BUCKET)
+    .createSignedUrl(path, SIGNED_URL_TTL_SECONDS)
+  if (signErr || !signed?.signedUrl) {
+    throw new Error(signErr?.message || 'Could not sign the uploaded photo URL.')
+  }
+  const url = signed.signedUrl
 
-  // Best-effort metadata row (the canonical copy lives in the report JSON).
+  // Best-effort metadata row (the canonical copy lives in the report JSON). The
+  // stored url is non-canonical — rendering always re-signs from `path` — so a
+  // soon-to-expire signed URL here is fine.
   const { data: row } = await supabase
     .from('report_photos')
     .insert({
       report_id: target.reportId,
       section_id: target.sectionId ?? null,
       item_id: target.itemId ?? null,
-      url: publicUrl,
+      url,
       path,
       caption: target.caption ?? null,
     })
@@ -106,7 +124,7 @@ export async function uploadPhoto(file: File, target: UploadTarget): Promise<Pho
 
   return {
     id: row?.id ?? uuid(),
-    url: publicUrl,
+    url,
     path,
     caption: target.caption ?? null,
     sectionId: target.sectionId ?? null,
@@ -114,12 +132,14 @@ export async function uploadPhoto(file: File, target: UploadTarget): Promise<Pho
   }
 }
 
-/** Storage path encoded in a public bucket URL, or null if it isn't one of ours. */
-export function pathFromPublicUrl(url: string): string | null {
-  const m = url.match(/\/object\/public\/([^/]+)\/(.+)$/)
-  if (!m || m[1] !== PHOTO_BUCKET) return null
-  return decodeURIComponent(m[2].split('?')[0])
-}
+/**
+ * Storage-URL → path parser. The shared implementation lives in lib/utils.ts
+ * (server+client safe) and now parses signed URLs as well as legacy public ones.
+ * Re-exported here, plus the back-compat `pathFromPublicUrl` alias that existing
+ * call sites (e.g. MainImageUploader) import.
+ */
+export { pathFromStorageUrl }
+export const pathFromPublicUrl = pathFromStorageUrl
 
 /**
  * Rotate a photo by re-encoding it client-side and swapping the stored file, so
@@ -169,9 +189,13 @@ export async function rotatePhoto(photo: PhotoRef, degrees: 90 | -90 | 180): Pro
     .upload(newPath, blob, { contentType: 'image/jpeg', upsert: false })
   if (upErr) throw new Error(upErr.message)
 
-  const {
-    data: { publicUrl },
-  } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(newPath)
+  // Bucket is PRIVATE (migration 013): mint a signed URL for the rotated copy.
+  // Best-effort — fall back to the old url if signing hiccups, since rendering
+  // re-signs from `path` (which we always update below) regardless.
+  const { data: signed } = await supabase.storage
+    .from(PHOTO_BUCKET)
+    .createSignedUrl(newPath, SIGNED_URL_TTL_SECONDS)
+  const url = signed?.signedUrl ?? photo.url
 
   // Best-effort metadata swap + old-file cleanup.
   try {
@@ -180,7 +204,7 @@ export async function rotatePhoto(photo: PhotoRef, degrees: 90 | -90 | 180): Pro
       report_id: reportId,
       section_id: photo.sectionId ?? null,
       item_id: photo.itemId ?? null,
-      url: publicUrl,
+      url,
       path: newPath,
       caption: photo.caption ?? null,
     })
@@ -190,7 +214,7 @@ export async function rotatePhoto(photo: PhotoRef, degrees: 90 | -90 | 180): Pro
     // Non-fatal — the JSON reference below is the canonical copy.
   }
 
-  return { ...photo, url: publicUrl, path: newPath }
+  return { ...photo, url, path: newPath }
 }
 
 /** Remove a photo from Storage + its metadata row. Failures are non-fatal. */

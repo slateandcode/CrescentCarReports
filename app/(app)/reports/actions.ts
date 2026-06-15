@@ -141,7 +141,46 @@ export async function saveReport(id: string, patch: ReportPatch): Promise<SaveRe
     []) as CriticalFinding[]
   const critical_findings = mergeFindings(pkg, checklist, storedFindings)
 
-  const update: Record<string, unknown> = { ...patch, counts, critical_findings }
+  // Mass-assignment guard: a server action is a public POST and the ReportPatch
+  // type is erased at runtime, so NEVER spread the raw patch into the UPDATE.
+  // Copy only an explicit allowlist of inspector-editable columns. This keeps a
+  // crafted call from forcing status='completed' (bypassing validateForCompletion),
+  // overwriting the unguessable public_id / the UNIQUE report_reference, or
+  // reassigning inspector_id. Status transitions go only through
+  // completeReport/reopenReport/setReportStatus; counts + critical_findings are
+  // recomputed below and never trusted from the client.
+  const MUTABLE_COLUMNS: (keyof ReportPatch)[] = [
+    'customer_name',
+    'customer_phone',
+    'customer_email',
+    'vehicle_make',
+    'vehicle_model',
+    'vehicle_year',
+    'vin',
+    'plate_number',
+    'odometer',
+    'regional_specs',
+    'transmission',
+    'fuel_type',
+    'engine_size',
+    'exterior_colour',
+    'inspection_location',
+    'inspection_date',
+    'inspection_time',
+    'main_vehicle_image_url',
+    'overall_condition',
+    'buyer_recommendation',
+    'inspector_summary',
+    'price_negotiation_notes',
+    'checklist',
+    'photos',
+  ]
+  const update: Record<string, unknown> = {}
+  for (const key of MUTABLE_COLUMNS) {
+    if (key in patch) update[key] = patch[key]
+  }
+  update.counts = counts
+  update.critical_findings = critical_findings
 
   const { data, error } = await supabase
     .from('inspection_reports')

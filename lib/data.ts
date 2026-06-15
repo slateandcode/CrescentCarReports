@@ -1,5 +1,6 @@
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { IS_DEMO } from '@/lib/env'
+import { signReportPhotos } from '@/lib/photo-sign'
 import type { InspectionReport, ReportStatus } from './report-types'
 
 /**
@@ -148,7 +149,9 @@ export async function getReportById(id: string): Promise<InspectionReport | null
   }
   const supabase = await createClient()
   const { data } = await supabase.from('inspection_reports').select('*').eq('id', id).maybeSingle()
-  return (data as InspectionReport) || null
+  if (!data) return null
+  // Bucket is private (migration 013): re-sign every photo url from its path.
+  return signReportPhotos(supabase, data as InspectionReport)
 }
 
 /**
@@ -174,7 +177,9 @@ export async function getReportWithInspector(
   const { inspector, ...report } = data as InspectionReport & {
     inspector: { full_name: string } | null
   }
-  return { report: report as InspectionReport, inspectorName: inspector?.full_name ?? null }
+  // Bucket is private (migration 013): re-sign every photo url from its path.
+  const signed = await signReportPhotos(supabase, report as InspectionReport)
+  return { report: signed, inspectorName: inspector?.full_name ?? null }
 }
 
 /**
@@ -199,7 +204,11 @@ export async function getReportWithInspectorAdmin(
   const { inspector, ...report } = data as InspectionReport & {
     inspector: { full_name: string } | null
   }
-  return { report: report as InspectionReport, inspectorName: inspector?.full_name ?? null }
+  // Bucket is private (migration 013): re-sign every photo url from its path. The
+  // service-role client bypasses RLS, so it can sign any report's photos — this
+  // is what lets the cookie-less headless-Chrome PDF render load the images.
+  const signed = await signReportPhotos(supabase, report as InspectionReport)
+  return { report: signed, inspectorName: inspector?.full_name ?? null }
 }
 
 /** Resolve the display name of the inspector who owns a report (for the report). */
