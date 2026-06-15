@@ -24,6 +24,20 @@ export function pathFromStorageUrl(url: string): string | null {
   return decodeURIComponent(m[2].split('?')[0])
 }
 
+/**
+ * Return `path` only if it is a safe SAME-ORIGIN path, else `fallback`. Guards
+ * against open redirects: the value must start with a single '/' and must NOT be
+ * protocol-relative ('//host') or backslash-tricked ('/\\host' — browsers and
+ * the Next router normalise '\' to '/'), both of which resolve to an EXTERNAL
+ * origin. Used for the ?redirect= / ?next= params so a link on our own domain
+ * can't bounce a freshly-authenticated user to an attacker site.
+ */
+export function safeInternalPath(path: string | null | undefined, fallback = '/dashboard'): string {
+  if (!path || !path.startsWith('/')) return fallback
+  if (path.startsWith('//') || path.startsWith('/\\')) return fallback
+  return path
+}
+
 /** True when an ISO timestamp is in the past. Lives outside components so it
  *  can read the clock without tripping the react purity lint rule. */
 export function isPast(iso: string): boolean {

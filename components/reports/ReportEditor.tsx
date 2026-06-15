@@ -174,14 +174,24 @@ export function ReportEditor({
   function setText<K extends keyof Form>(key: K, value: string) {
     patch({ [key]: value === '' ? null : (value as Form[K]) } as Partial<Form>)
   }
-  function setItem(sectionId: string, itemId: string, next: ChecklistItemState) {
-    setForm((prev) => ({
-      ...prev,
-      checklist: {
-        ...prev.checklist,
-        [sectionId]: { ...(prev.checklist[sectionId] || {}), [itemId]: next },
-      },
-    }))
+  // Accepts a value OR a React-style updater. The updater form is essential for
+  // the async photo handlers: an upload that resolves after the inspector has
+  // edited the same item must merge against the LATEST item state, not the stale
+  // render-time closure (which would clobber the just-typed comment/status).
+  function setItem(
+    sectionId: string,
+    itemId: string,
+    next: ChecklistItemState | ((prev: ChecklistItemState) => ChecklistItemState),
+  ) {
+    setForm((prev) => {
+      const section = prev.checklist[sectionId] || {}
+      const current = section[itemId] || {}
+      const value = typeof next === 'function' ? next(current) : next
+      return {
+        ...prev,
+        checklist: { ...prev.checklist, [sectionId]: { ...section, [itemId]: value } },
+      }
+    })
   }
   function setPaint(panelId: string, condition: PaintCondition) {
     setForm((prev) => ({
@@ -467,8 +477,8 @@ export function ReportEditor({
             photos={form.photos.filter((p) => p.sectionId === 'gallery-exterior')}
             target={{ sectionId: 'gallery-exterior' }}
             onAdd={(newPhotos) => setForm((prev) => ({ ...prev, photos: [...prev.photos, ...newPhotos] }))}
-            onRemove={(photo) => patch({ photos: form.photos.filter((p) => p.id !== photo.id) })}
-            onUpdate={(photo) => patch({ photos: form.photos.map((p) => (p.id === photo.id ? photo : p)) })}
+            onRemove={(photo) => setForm((prev) => ({ ...prev, photos: prev.photos.filter((p) => p.id !== photo.id) }))}
+            onUpdate={(photo) => setForm((prev) => ({ ...prev, photos: prev.photos.map((p) => (p.id === photo.id ? photo : p)) }))}
             label="Add photo"
           />
         </SectionAccordion>
@@ -478,8 +488,8 @@ export function ReportEditor({
             photos={form.photos.filter((p) => p.sectionId === 'gallery-interior')}
             target={{ sectionId: 'gallery-interior' }}
             onAdd={(newPhotos) => setForm((prev) => ({ ...prev, photos: [...prev.photos, ...newPhotos] }))}
-            onRemove={(photo) => patch({ photos: form.photos.filter((p) => p.id !== photo.id) })}
-            onUpdate={(photo) => patch({ photos: form.photos.map((p) => (p.id === photo.id ? photo : p)) })}
+            onRemove={(photo) => setForm((prev) => ({ ...prev, photos: prev.photos.filter((p) => p.id !== photo.id) }))}
+            onUpdate={(photo) => setForm((prev) => ({ ...prev, photos: prev.photos.map((p) => (p.id === photo.id ? photo : p)) }))}
             label="Add photo"
           />
         </SectionAccordion>

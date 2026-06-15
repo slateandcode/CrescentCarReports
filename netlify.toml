@@ -18,3 +18,14 @@
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
+
+# PDF rendering (/reports/:id/pdf) spawns headless Chromium. On a cold start
+# @sparticuz/chromium-min downloads a ~50MB pack from CHROMIUM_PACK_URL (pinned
+# to the exact installed chromium-min version). To keep that within the function
+# time budget:
+#   • Set CHROMIUM_PACK_URL (env) to a self-hosted copy of the pack on Supabase
+#     Storage in the same region — much faster than the GitHub release default.
+#   • If the PDF route times out on cold starts, raise the function timeout in the
+#     Netlify UI (Site config → Functions) — it is an account/UI setting, not a
+#     netlify.toml key. The render token now lasts 5 min and is minted after the
+#     cold-start download, so token expiry is no longer the limiting factor.

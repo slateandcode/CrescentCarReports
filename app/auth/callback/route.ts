@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { safeInternalPath } from '@/lib/utils'
 
 /**
  * OAuth/recovery code exchange. Supabase email links land here with `?code=`;
@@ -9,8 +10,8 @@ import { createClient } from '@/lib/supabase/server'
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = request.nextUrl
   const code = searchParams.get('code')
-  const next = searchParams.get('next') || '/dashboard'
-  const safeNext = next.startsWith('/') ? next : '/dashboard'
+  // Same open-redirect guard as /login (rejects //host and /\host).
+  const safeNext = safeInternalPath(searchParams.get('next'))
 
   if (code) {
     const supabase = await createClient()

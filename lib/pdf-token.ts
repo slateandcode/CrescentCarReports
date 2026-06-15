@@ -6,12 +6,15 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
  * rendered without a user session — used only so the server-side PDF generator
  * (headless Chrome, which has no auth cookie) can load `/reports/:id/preview`.
  *
- * The token is bound to a specific report id and expires in 2 minutes. It is
- * verified in the (Node-runtime) preview page; a missing/invalid/expired token
- * simply falls back to the normal signed-in auth check, so nothing is exposed.
+ * The token is bound to a specific report id and expires in 5 minutes. The PDF
+ * route mints it AFTER the (potentially slow, ~50MB) serverless Chromium
+ * cold-start download, so the download can't consume the token's lifetime; the
+ * window then comfortably covers page load + render. It is verified in the
+ * (Node-runtime) render page; a missing/invalid/expired token simply falls back
+ * to the normal signed-in auth check, so nothing is exposed.
  */
 
-const TTL_MS = 2 * 60 * 1000
+const TTL_MS = 5 * 60 * 1000
 
 function secret(): string {
   const s = process.env.PDF_TOKEN_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY

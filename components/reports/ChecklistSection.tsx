@@ -65,7 +65,10 @@ export function ChecklistSection({
   reportId: string
   section: SectionDef
   state: SectionState
-  onItemChange: (itemId: string, next: ChecklistItemState) => void
+  onItemChange: (
+    itemId: string,
+    next: ChecklistItemState | ((prev: ChecklistItemState) => ChecklistItemState),
+  ) => void
   /** Exterior only: per-panel paint conditions + setter. */
   paintState?: SectionState
   onPaintChange?: (panelId: string, condition: PaintCondition) => void

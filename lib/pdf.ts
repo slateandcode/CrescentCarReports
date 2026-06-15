@@ -58,8 +58,16 @@ const CHROMIUM_PACK_URL =
   process.env.CHROMIUM_PACK_URL ||
   'https://github.com/Sparticuz/chromium/releases/download/v149.0.0/chromium-v149.0.0-pack.x64.tar'
 
-/** Render a URL to a PDF buffer via headless Chromium. */
-export async function renderUrlToPdf(url: string): Promise<Buffer> {
+/**
+ * Render a URL to a PDF buffer via headless Chromium. `url` may be a thunk, which
+ * is resolved AFTER the browser launches — used so the PDF route mints its
+ * short-lived render token only once the (slow) serverless Chromium cold-start
+ * download has completed, instead of before it (which risked the token expiring
+ * mid-cold-start and 500-ing the render).
+ */
+export async function renderUrlToPdf(
+  url: string | (() => string | Promise<string>),
+): Promise<Buffer> {
   const puppeteer = (await import('puppeteer-core')).default
   const localChrome = findChrome()
 
@@ -85,7 +93,9 @@ export async function renderUrlToPdf(url: string): Promise<Buffer> {
   const browser = await puppeteer.launch(launchOptions)
   try {
     const page = await browser.newPage()
-    await page.goto(url, { waitUntil: 'networkidle0', timeout: 25000 })
+    // Resolve the target now (post-launch) so a token thunk is minted fresh.
+    const target = typeof url === 'function' ? await url() : url
+    await page.goto(target, { waitUntil: 'networkidle0', timeout: 25000 })
     const pdf = await page.pdf({
       printBackground: true,
       preferCSSPageSize: true,

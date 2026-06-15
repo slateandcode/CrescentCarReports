@@ -15,7 +15,7 @@ interface Props {
   sectionId: string
   item: ChecklistItemDef
   state: ChecklistItemState
-  onChange: (next: ChecklistItemState) => void
+  onChange: (next: ChecklistItemState | ((prev: ChecklistItemState) => ChecklistItemState)) => void
   /** Common-fault tick-boxes for this section. */
   commonIssues?: string[]
   /** Per-corner tyre: manufacturer / date / tread + photos are mandatory. */
@@ -103,14 +103,21 @@ export function ChecklistItemCard({
     const preset = ACCIDENT_PRESETS.find((p) => p.label === selected[0]) ?? null
     onChange({ ...state, comment: generateAccidentComment(preset), commentManual: false })
   }
+  // Photo mutations are ASYNC (upload resolves later), so they must merge against
+  // the latest item state via the functional updater — not the render-time `state`
+  // closure, which would silently overwrite a comment/status the inspector edited
+  // while the upload was in flight (routine on slow mobile connections).
   function addPhotos(newPhotos: PhotoRef[]) {
-    onChange({ ...state, photos: [...photos, ...newPhotos] })
+    onChange((prev) => ({ ...prev, photos: [...(prev.photos ?? []), ...newPhotos] }))
   }
   function removePhoto(photo: PhotoRef) {
-    onChange({ ...state, photos: photos.filter((p) => p.id !== photo.id) })
+    onChange((prev) => ({ ...prev, photos: (prev.photos ?? []).filter((p) => p.id !== photo.id) }))
   }
   function updatePhoto(photo: PhotoRef) {
-    onChange({ ...state, photos: photos.map((p) => (p.id === photo.id ? photo : p)) })
+    onChange((prev) => ({
+      ...prev,
+      photos: (prev.photos ?? []).map((p) => (p.id === photo.id ? photo : p)),
+    }))
   }
 
   const needsPhoto = showIssue && photos.length === 0

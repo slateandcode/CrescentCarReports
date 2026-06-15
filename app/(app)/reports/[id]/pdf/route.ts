@@ -26,11 +26,17 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   // cookie, so we pass a short-lived signed token that authorises this one
   // report's render server-side (/render 404s without a valid token).
   const origin = _req.nextUrl.origin
-  const token = createPdfToken(id)
-  const url = `${origin}/render/${id}?pdf=${encodeURIComponent(token)}`
+  // Mint the short-lived render token lazily: renderUrlToPdf invokes this AFTER
+  // the browser launches (i.e. after the serverless Chromium cold-start
+  // download), so a slow cold start can't expire the token before /render
+  // verifies it.
+  const makeUrl = () => {
+    const token = createPdfToken(id)
+    return `${origin}/render/${id}?pdf=${encodeURIComponent(token)}`
+  }
 
   try {
-    const pdf = await renderUrlToPdf(url)
+    const pdf = await renderUrlToPdf(makeUrl)
     const filename = `${report.report_reference || 'inspection-report'}.pdf`
     return new Response(new Uint8Array(pdf), {
       headers: {

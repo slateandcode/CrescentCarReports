@@ -1,5 +1,6 @@
 import { AuthShell } from '@/components/auth/AuthShell'
 import { LoginForm } from '@/components/auth/LoginForm'
+import { safeInternalPath } from '@/lib/utils'
 
 export const metadata = { title: 'Sign in' }
 
@@ -15,7 +16,9 @@ export default async function LoginPage({
   searchParams: Promise<{ redirect?: string; reason?: string }>
 }) {
   const { redirect, reason } = await searchParams
-  const redirectTo = redirect && redirect.startsWith('/') ? redirect : '/dashboard'
+  // Reject protocol-relative / backslash values so ?redirect= can't open-redirect
+  // a freshly-authenticated inspector off-site (see safeInternalPath).
+  const redirectTo = safeInternalPath(redirect)
   const notice = reason ? NOTICES[reason] : undefined
 
   return (
