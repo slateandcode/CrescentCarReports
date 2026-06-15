@@ -10,12 +10,11 @@ const nextConfig: NextConfig = {
     root: process.cwd(),
   },
   // Headless-Chromium PDF rendering (lib/pdf.ts). Keep these out of the bundler
-  // (they ship native/binary assets) and make sure the serverless Chromium
-  // binary is traced into the PDF route's function on deploy.
-  serverExternalPackages: ['@sparticuz/chromium', 'puppeteer-core'],
-  outputFileTracingIncludes: {
-    '/reports/[id]/pdf': ['./node_modules/@sparticuz/chromium/**'],
-  },
+  // — they ship native code. The Chromium binary is no longer bundled at all:
+  // @sparticuz/chromium-min fetches it from CHROMIUM_PACK_URL at runtime, so no
+  // file-tracing is needed (the previous outputFileTracingIncludes approach
+  // silently dropped the binary on Netlify).
+  serverExternalPackages: ['@sparticuz/chromium-min', 'puppeteer-core'],
   images: {
     // Allow Supabase Storage public/signed image URLs to be optimised.
     remotePatterns: supabaseUrl

@@ -7,11 +7,13 @@ import { existsSync } from 'node:fs'
  * Two execution environments, auto-detected:
  *   • Local dev (Windows/Mac/Linux with a browser installed) — drives the
  *     locally-installed Chrome/Edge found by findChrome().
- *   • Serverless (Netlify functions, no system browser) — uses the bundled
- *     @sparticuz/chromium binary. This is what makes "Download PDF" work in
- *     production (and therefore on phones); previously the route 500'd on the
- *     host because no system Chrome existed, and the client fell back to
- *     window.print(), which fails on iOS Safari.
+ *   • Serverless (Netlify functions, no system browser) — uses
+ *     @sparticuz/chromium-min, which carries NO bundled binary; the Chromium
+ *     "pack" is fetched from CHROMIUM_PACK_URL at runtime and extracted to /tmp.
+ *     This is what makes "Download PDF" work in production (and therefore on
+ *     phones). The previous bundled @sparticuz/chromium relied on Next/Netlify
+ *     file-tracing to ship the binary, which silently dropped it — the function
+ *     then threw "input directory .../bin does not exist" and the page 500'd.
  *
  * Produces a true A4 page (the report CSS declares `@page { size: 210mm 297mm;
  * margin: 0 }`, honoured via preferCSSPageSize) edge-to-edge with backgrounds.
@@ -43,6 +45,19 @@ export function findChrome(): string | null {
   return null
 }
 
+/**
+ * Where the serverless Chromium binary is fetched from at runtime.
+ * @sparticuz/chromium-min ships no binary, so it downloads this "pack" and
+ * extracts it to /tmp on the first (cold) request, then reuses it on warm
+ * invocations. This sidesteps the function-bundle file-tracing that was
+ * dropping the binary. Override with CHROMIUM_PACK_URL (e.g. a faster
+ * self-hosted copy on Supabase Storage). The pack version MUST match the
+ * installed @sparticuz/chromium-min version (149.0.0).
+ */
+const CHROMIUM_PACK_URL =
+  process.env.CHROMIUM_PACK_URL ||
+  'https://github.com/Sparticuz/chromium/releases/download/v149.0.0/chromium-v149.0.0-pack.x64.tar'
+
 /** Render a URL to a PDF buffer via headless Chromium. */
 export async function renderUrlToPdf(url: string): Promise<Buffer> {
   const puppeteer = (await import('puppeteer-core')).default
@@ -56,12 +71,12 @@ export async function renderUrlToPdf(url: string): Promise<Buffer> {
         args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
       }
     : await (async () => {
-        const chromium = (await import('@sparticuz/chromium')).default
+        const chromium = (await import('@sparticuz/chromium-min')).default
         // The report is inline SVG/HTML — no WebGL — so skip the graphics stack
         // (avoids extracting swiftshader, trimming serverless cold-start).
         chromium.setGraphicsMode = false
         return {
-          executablePath: await chromium.executablePath(),
+          executablePath: await chromium.executablePath(CHROMIUM_PACK_URL),
           headless: true as const,
           args: chromium.args,
         }
