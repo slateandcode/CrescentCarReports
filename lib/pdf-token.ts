@@ -17,6 +17,11 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 const TTL_MS = 5 * 60 * 1000
 
 function secret(): string {
+  // Prefer a dedicated PDF_TOKEN_SECRET (a random value owned by this app).
+  // Falling back to SUPABASE_SERVICE_ROLE_KEY keeps unconfigured envs working,
+  // but it couples token validity to the DB key: rotating that key would
+  // silently invalidate every in-flight PDF token. Setting PDF_TOKEN_SECRET in
+  // production decouples the two — see .env.example.
   const s = process.env.PDF_TOKEN_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!s) throw new Error('No secret available for PDF token signing.')
   return s

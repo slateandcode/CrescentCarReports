@@ -107,7 +107,15 @@ export async function getReports(filters: ReportFilters): Promise<InspectionRepo
     // value parsing, so a term containing any of them (e.g. a name like
     // "Smith, John") would otherwise 400 and the search would silently return
     // nothing. Collapse the leftover whitespace so the ilike still matches.
-    const s = filters.search.trim().replace(/[,()"\\]/g, ' ').replace(/\s+/g, ' ').trim()
+    // Then escape the LIKE wildcards % and _ (they are literal here, not patterns):
+    // a term like "50%" or "AB_12" should match those exact characters, not act as
+    // a broad wildcard. RLS still scopes rows — this is correctness only.
+    const s = filters.search
+      .trim()
+      .replace(/[,()"\\]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/[%_]/g, (m) => '\\' + m)
     if (s) {
       // ilike across the searchable text columns.
       const cols = [

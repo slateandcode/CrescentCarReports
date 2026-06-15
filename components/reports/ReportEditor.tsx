@@ -98,6 +98,10 @@ export function ReportEditor({
   const [saving, setSaving] = useState(false)
   const [completing, setCompleting] = useState(false)
   const [completeError, setCompleteError] = useState<string | null>(null)
+  // Set when a save loses to a concurrent edit elsewhere. Once set we stop
+  // autosaving (a reload is required) and show a banner; see doSave + the
+  // autosave effect below.
+  const [conflict, setConflict] = useState(false)
 
   const counts = useMemo(
     () => computeCounts(report.package_type, form.checklist),
@@ -112,6 +116,17 @@ export function ReportEditor({
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const formRef = useRef(form)
   const dirtyRef = useRef(false)
+  // Optimistic-concurrency baseline: the updated_at this editor last saw. Sent
+  // as expectedUpdatedAt on each save and re-adopted from the server's response
+  // so a normal run of saves from THIS editor keeps matching. A mismatch means
+  // someone else saved → the server returns { conflict: true }.
+  const baselineUpdatedAt = useRef(report.updated_at)
+  // Guards against overlapping in-flight saves: without it a slow save could
+  // resolve after a newer one and adopt a stale baseline, losing updates.
+  const inFlight = useRef(false)
+  // Stop autosaving once a conflict is detected (kept in a ref so the autosave
+  // effect's cleanup/closure always sees the latest value).
+  const conflictRef = useRef(false)
 
   useEffect(() => {
     formRef.current = form
@@ -122,22 +137,55 @@ export function ReportEditor({
       clearTimeout(timer.current)
       timer.current = null
     }
+    // A conflict is terminal until reload — never try to save over the winner.
+    if (conflictRef.current) return false
+    // Coalesce overlapping saves: if one is already in flight, skip starting a
+    // second. The trailing edit stays dirty and the autosave debounce (or an
+    // explicit flush) will retry once this one settles.
+    if (inFlight.current) return false
+    inFlight.current = true
     setSaving(true)
     setSaveState('saving')
     const f = formRef.current
     // Manual findings are no longer authored here — the server re-derives auto
     // findings from Major issues.
     const patch: ReportPatch = { ...f, critical_findings: [] }
-    const result = await saveReport(report.id, patch)
+    const result = await saveReport(report.id, patch, baselineUpdatedAt.current)
+    inFlight.current = false
     setSaving(false)
     if (result.ok) {
+      // Adopt the new baseline so the next save's precondition matches.
+      if (result.updated_at) baselineUpdatedAt.current = result.updated_at
       dirtyRef.current = false
       setSaveState('saved')
       return true
     }
+    if (result.conflict) {
+      conflictRef.current = true
+      setConflict(true)
+    }
     setSaveState('error')
     return false
   }, [report.id])
+
+  // Flush pending edits before an in-editor client-side navigation (Preview /
+  // back-to-Reports). Autosave's beforeunload only covers full page unloads, so
+  // a <Link> navigation within the 1.5s debounce would otherwise drop the last
+  // edit and render a stale preview/PDF. Best-effort: we await the save but the
+  // caller navigates regardless, so a failed save can't trap the user here.
+  const flush = useCallback(async (): Promise<void> => {
+    if (timer.current) {
+      clearTimeout(timer.current)
+      timer.current = null
+    }
+    if (!dirtyRef.current || conflictRef.current) return
+    try {
+      await doSave()
+    } catch {
+      // Swallow — navigation proceeds either way; the edit stays dirty and the
+      // destination still shows the last persisted state.
+    }
+  }, [doSave])
 
   // Debounced autosave whenever the form changes after the first render.
   const firstRender = useRef(true)
@@ -146,6 +194,8 @@ export function ReportEditor({
       firstRender.current = false
       return
     }
+    // A detected conflict freezes autosave until the page is reloaded.
+    if (conflictRef.current) return
     dirtyRef.current = true
     setSaveState('unsaved')
     if (timer.current) clearTimeout(timer.current)
@@ -545,6 +595,25 @@ export function ReportEditor({
           </div>
         )}
 
+        {/* Optimistic-concurrency conflict: another tab/user saved over us.
+            Autosave is frozen — the inspector must reload to get the latest. */}
+        {conflict && (
+          <div className="rounded-card border border-fail/30 bg-fail-muted p-3 text-sm text-fail">
+            <p className="font-semibold">This report was changed elsewhere.</p>
+            <p className="mt-0.5">
+              Saving is paused to avoid overwriting those changes.{' '}
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="font-semibold underline underline-offset-2"
+              >
+                Reload
+              </button>{' '}
+              to get the latest version.
+            </p>
+          </div>
+        )}
+
         {/* Danger zone — admin only (deletion renumbers everyone's references). */}
         {canDelete && (
           <div className="mt-2 flex flex-col gap-3 rounded-card border border-fail/20 bg-fail-muted/40 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -568,6 +637,7 @@ export function ReportEditor({
         onSave={() => void doSave()}
         onComplete={onComplete}
         onReopen={onReopen}
+        onNavigate={flush}
         customerPhone={form.customer_phone}
         vehicleLabel={vehicleTitle({
           vehicle_year: form.vehicle_year,

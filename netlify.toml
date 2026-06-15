@@ -9,6 +9,10 @@
 #   NEXT_PUBLIC_SUPABASE_URL            -> Crescent Car Reports project (jwslaqufrdoodsxasxnr)
 #   NEXT_PUBLIC_SUPABASE_ANON_KEY       -> same project's anon (publishable) key
 #   SUPABASE_SERVICE_ROLE_KEY           -> same project's service-role key
+#   PDF_TOKEN_SECRET                    -> dedicated random key for PDF render tokens
+#                                          (lib/pdf-token.ts). Optional — falls back to
+#                                          SUPABASE_SERVICE_ROLE_KEY, but set a dedicated
+#                                          one so rotating the DB key can't break PDFs.
 # Plus any auth / Google Calendar / Sentry keys the app uses.
 # Don't commit real secrets to this file.
 

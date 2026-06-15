@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Trash2, Loader2, AlertTriangle } from 'lucide-react'
 import { deleteReport } from '@/app/(app)/reports/actions'
@@ -27,6 +27,43 @@ export function DeleteReportButton({
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const router = useRouter()
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const cancelRef = useRef<HTMLButtonElement>(null)
+
+  // Modal a11y (mirrors PhotoAdjuster's Escape handling, extended with focus
+  // management): focus the Cancel button on open, close on Escape unless a
+  // delete is in flight, and keep Tab focus inside the dialog.
+  useEffect(() => {
+    if (!open) return
+    cancelRef.current?.focus()
+
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        if (!pending) setOpen(false)
+        return
+      }
+      if (e.key !== 'Tab') return
+      const root = dialogRef.current
+      if (!root) return
+      const focusable = root.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      )
+      if (focusable.length === 0) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      const active = document.activeElement
+      // Wrap at the ends so focus can't escape the dialog into the page behind.
+      if (e.shiftKey && active === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, pending])
 
   function confirmDelete() {
     setError(null)
@@ -70,6 +107,7 @@ export function DeleteReportButton({
             onClick={() => !pending && setOpen(false)}
           />
           <div
+            ref={dialogRef}
             role="dialog"
             aria-modal="true"
             aria-label="Delete report"
@@ -96,6 +134,7 @@ export function DeleteReportButton({
 
             <div className="mt-5 flex justify-end gap-2">
               <button
+                ref={cancelRef}
                 type="button"
                 onClick={() => setOpen(false)}
                 disabled={pending}

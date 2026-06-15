@@ -40,7 +40,11 @@ const SIGNED_URL_TTL_SECONDS = 60 * 60 * 24
 async function compressImage(file: File): Promise<File> {
   if (!file.type.startsWith('image/') || file.size < COMPRESS_MIN_BYTES) return file
   try {
-    const bitmap = await createImageBitmap(file)
+    // `imageOrientation: 'from-image'` applies the EXIF orientation tag when
+    // decoding, so phone photos (which encode rotation in EXIF rather than the
+    // pixels) get rotated upright. Without it the orientation is dropped and the
+    // re-encoded JPEG renders sideways in the report/PDF.
+    const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
     const scale = Math.min(1, COMPRESS_MAX_EDGE / Math.max(bitmap.width, bitmap.height))
     const w = Math.max(1, Math.round(bitmap.width * scale))
     const h = Math.max(1, Math.round(bitmap.height * scale))
@@ -82,6 +86,18 @@ export async function uploadPhoto(file: File, target: UploadTarget): Promise<Pho
   const supabase = createClient()
   // Shrink the photo before it ever crosses the network (see compressImage).
   const upload = await compressImage(file)
+
+  // HEIC/HEIF guard. The bucket allows these, but Chrome (our PDF renderer)
+  // can't display them. compressImage transcodes to JPEG whenever it can decode
+  // the bytes; if the result is STILL heic/heif it means decode failed and we'd
+  // otherwise upload an undisplayable file that shows blank in the PDF. Reject it
+  // so the inspector sees a clear message. (The common iOS path is unaffected —
+  // Safari/most browsers already hand us JPEG, so `upload.type` isn't heic here.)
+  const uploadType = upload.type.toLowerCase()
+  if (uploadType === 'image/heic' || uploadType === 'image/heif') {
+    throw new Error("This photo format (HEIC) isn't supported — please choose a JPEG or PNG.")
+  }
+
   const folder = target.itemId
     ? `items/${target.itemId}`
     : target.sectionId
@@ -156,7 +172,9 @@ export async function rotatePhoto(photo: PhotoRef, degrees: 90 | -90 | 180): Pro
 
   const resp = await fetch(photo.url, { cache: 'no-store' })
   if (!resp.ok) throw new Error('Could not load the photo to rotate.')
-  const bitmap = await createImageBitmap(await resp.blob())
+  // `imageOrientation: 'from-image'` so the source's EXIF orientation is honoured
+  // before we apply the explicit rotation on top (matches compressImage).
+  const bitmap = await createImageBitmap(await resp.blob(), { imageOrientation: 'from-image' })
 
   // Downscale oversized originals while we're re-encoding anyway.
   const scale = Math.min(1, COMPRESS_MAX_EDGE / Math.max(bitmap.width, bitmap.height))

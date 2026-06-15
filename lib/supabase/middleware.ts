@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { IS_DEMO } from '@/lib/env'
 
 /** Routes that never require a session. */
-const PUBLIC_PREFIXES = ['/login', '/invite', '/forgot-password', '/auth', '/exterior-preview']
+const PUBLIC_PREFIXES = ['/login', '/invite', '/forgot-password', '/auth']
 
 /** Inactivity window — a session idle longer than this is force-logged-out. */
 const INACTIVITY_LIMIT_MS = 14 * 24 * 60 * 60 * 1000 // 14 days

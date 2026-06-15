@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Check, Cloud, CloudOff, Loader2, Save, Eye, Square, Send } from 'lucide-react'
 import type { ReportCounts, ReportStatus, PackageType } from '@/lib/report-types'
 import { completionPercent } from '@/lib/report-utils'
@@ -117,6 +118,7 @@ export function StickyReportActions({
   onSave,
   onComplete,
   onReopen,
+  onNavigate,
   customerPhone,
   vehicleLabel,
 }: {
@@ -128,9 +130,13 @@ export function StickyReportActions({
   onSave: () => void
   onComplete: () => void
   onReopen: () => void
+  /** Flush pending autosave changes before an in-editor client-side navigation
+   *  (the Preview link). Awaited, but navigation proceeds regardless. */
+  onNavigate?: () => Promise<void>
   customerPhone?: string | null
   vehicleLabel: string
 }) {
+  const router = useRouter()
   const completed = status === 'completed'
   const waUrl = whatsappShareUrl(customerPhone, vehicleLabel)
   return (
@@ -159,7 +165,23 @@ export function StickyReportActions({
             {saving ? <Spinner /> : <Save size={16} />}
             Save
           </button>
-          <Link href={`/reports/${reportId}/preview`} className={ACTION_BTN}>
+          <Link
+            href={`/reports/${reportId}/preview`}
+            className={ACTION_BTN}
+            // onNavigate fires only on same-origin client-side transitions (not
+            // Cmd/Ctrl-click → new tab), so we can safely cancel it, flush any
+            // pending edit, then push — guaranteeing the preview/PDF renders the
+            // latest changes instead of a stale pre-debounce snapshot.
+            onNavigate={
+              onNavigate
+                ? (e) => {
+                    e.preventDefault()
+                    const href = `/reports/${reportId}/preview`
+                    void onNavigate().finally(() => router.push(href))
+                  }
+                : undefined
+            }
+          >
             <Eye size={16} />
             Preview
           </Link>

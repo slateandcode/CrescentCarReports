@@ -88,6 +88,22 @@ export async function assignBookingInspector(
   if (!session) return { ok: false, error: 'Only admins can reassign bookings.' }
 
   const supabase = await createClient()
+
+  // Unassign (null) is always allowed. Otherwise the target must resolve to an
+  // ACTIVE inspector/admin profile — a suspended or unknown id would silently
+  // assign work to someone who can no longer access the report (mirrors the
+  // status='active' filter in getActiveInspectors / confirm_booking_paid).
+  if (inspectorId) {
+    const { data: inspector } = await supabase
+      .from('inspector_profiles')
+      .select('id, role, status')
+      .eq('id', inspectorId)
+      .maybeSingle()
+    if (!inspector || inspector.status !== 'active' || (inspector.role !== 'inspector' && inspector.role !== 'admin')) {
+      return { ok: false, error: 'Pick an active inspector.' }
+    }
+  }
+
   const { error } = await supabase
     .from('bookings')
     .update({ assigned_inspector: inspectorId })
@@ -306,7 +322,11 @@ export async function createReportFromBooking(bookingId: string): Promise<Bookin
         plate_number: b.plate_number,
         inspection_location: `${b.address}, ${b.emirate}`,
         inspection_date: b.inspection_date,
-        inspection_time: SLOTS[b.slot_time],
+        // Store the canonical slot key ('09:30'), NOT the display label
+        // (SLOTS['09:30'] === '9:30 AM'). The report editor's time <select> is
+        // built from SLOT_TIMES values, so the key round-trips; the label would
+        // fall through to the "legacy / off-slot" option instead of matching.
+        inspection_time: b.slot_time,
         checklist: {},
         critical_findings: [],
         photos: [],

@@ -96,6 +96,11 @@ export interface ReportPatch {
 export interface SaveResult {
   ok: boolean
   error?: string
+  /** True when an optimistic-concurrency precondition matched 0 rows: the report
+   *  was changed elsewhere since `expectedUpdatedAt`. The caller should stop
+   *  autosaving and prompt for a reload rather than treating it as a transient
+   *  error. */
+  conflict?: boolean
   updated_at?: string
   counts?: ReturnType<typeof computeCounts>
   critical_findings?: CriticalFinding[]
@@ -104,8 +109,18 @@ export interface SaveResult {
 /**
  * Persist an editor patch. Counts and auto critical-findings are always
  * recomputed server-side from the package + checklist so they can't drift.
+ *
+ * Optimistic concurrency: when `expectedUpdatedAt` is supplied (the row's
+ * `updated_at` the editor last saw), the UPDATE is gated on it. If another
+ * tab/user has since saved, `updated_at` no longer matches, the UPDATE touches
+ * 0 rows, and we return `{ ok: false, conflict: true }` instead of silently
+ * clobbering their whole report.
  */
-export async function saveReport(id: string, patch: ReportPatch): Promise<SaveResult> {
+export async function saveReport(
+  id: string,
+  patch: ReportPatch,
+  expectedUpdatedAt?: string,
+): Promise<SaveResult> {
   if (IS_DEMO) {
     const { demoSaveReport } = await import('@/lib/demo')
     const next = demoSaveReport(id, patch as Partial<InspectionReport>)
@@ -182,14 +197,27 @@ export async function saveReport(id: string, patch: ReportPatch): Promise<SaveRe
   update.counts = counts
   update.critical_findings = critical_findings
 
-  const { data, error } = await supabase
-    .from('inspection_reports')
-    .update(update)
-    .eq('id', id)
-    .select('updated_at')
-    .maybeSingle()
+  let query = supabase.from('inspection_reports').update(update).eq('id', id)
+  // Optimistic-concurrency gate: only update if the row still has the
+  // updated_at the editor last observed. A stale value matches 0 rows → conflict.
+  if (expectedUpdatedAt) query = query.eq('updated_at', expectedUpdatedAt)
 
-  if (error || !data) return { ok: false, error: error?.message || 'Save failed.' }
+  const { data, error } = await query.select('updated_at').maybeSingle()
+
+  if (error) return { ok: false, error: error.message }
+  if (!data) {
+    // No row matched. With a precondition this means a concurrent write moved
+    // updated_at on (the row still exists / is accessible). Surface it as a
+    // conflict so the editor can stop autosaving and ask for a reload.
+    if (expectedUpdatedAt) {
+      return {
+        ok: false,
+        conflict: true,
+        error: 'This report was changed elsewhere. Reload to get the latest version.',
+      }
+    }
+    return { ok: false, error: 'Save failed.' }
+  }
 
   return { ok: true, updated_at: data.updated_at, counts, critical_findings }
 }

@@ -274,7 +274,12 @@ export function sectionScores(pkg: PackageType, checklist: ChecklistData): Secti
     const sectionState = checklist[section.id] || {}
     let graded = 0
     for (const item of section.items) {
-      if (itemStatus(sectionState[item.id])) graded += 1
+      // Only pass/minor/major count as graded — an 'na' item deducts nothing, so
+      // counting it would let an all-N/A section read as a free 100. Excluding it
+      // keeps such a section at graded === 0 so it drops out of the weighted
+      // overallScore below instead of skewing it to a perfect 100/100.
+      const status = itemStatus(sectionState[item.id])
+      if (status && status !== 'na') graded += 1
     }
     let score = sectionScore(sectionState, section.id)
     // Exterior also carries the paint-panel deductions, and the panels count as

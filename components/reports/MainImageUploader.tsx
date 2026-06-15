@@ -42,8 +42,12 @@ export function MainImageUploader({
     setError(null)
     try {
       const ref = await uploadPhoto(file, { reportId, sectionId: 'main' })
-      // Clean up the previously-uploaded main image if any.
-      if (lastRef.current) await deletePhoto(lastRef.current)
+      // Clean up the previous main image's storage file. lastRef only holds
+      // in-session uploads, so for a photo loaded from a saved report it's null —
+      // fall back to a ref derived from the saved URL so the orphan is still
+      // removed. Best-effort: deletePhoto swallows its own failures.
+      const prev = lastRef.current ?? currentRef()
+      if (prev) await deletePhoto(prev)
       lastRef.current = ref
       onChange(ref.url)
     } catch (e) {
@@ -55,10 +59,11 @@ export function MainImageUploader({
   }
 
   async function remove() {
-    if (lastRef.current) {
-      await deletePhoto(lastRef.current)
-      lastRef.current = null
-    }
+    // As in handleFile: prefer the in-session ref, else derive one from the saved
+    // URL so a pre-existing main photo's storage file is cleaned up too.
+    const target = lastRef.current ?? currentRef()
+    if (target) await deletePhoto(target)
+    lastRef.current = null
     onChange(null)
   }
 
