@@ -1,4 +1,3 @@
-import Image from 'next/image'
 import { format } from 'date-fns'
 import {
   Camera,
@@ -63,6 +62,7 @@ import {
   DocStat,
   DocStatusBadge,
   RecommendationBadge,
+  DocImg,
 } from './DocPrimitives'
 import { HealthGauge } from './ReportDonutChart'
 import {
@@ -153,11 +153,9 @@ function ItemPhotos({ photos, alt }: { photos?: PhotoRef[]; alt: string }) {
       {list.map((p) => (
         <figure key={p.id} className="w-32">
           <div className="relative h-24 w-32 overflow-hidden rounded-lg border border-doc-border bg-doc-surface">
-            <Image
+            <DocImg
               src={p.url}
               alt={p.caption || alt}
-              fill
-              sizes="128px"
               className={p.fit === 'contain' ? 'object-contain' : 'object-cover'}
             />
           </div>
@@ -320,11 +318,8 @@ export function ReportCoverPage({ report, template }: { report: InspectionReport
                 'radial-gradient(circle, rgba(255,198,0,0.06) 28%, rgba(255,198,0,0.02) 52%, transparent 68%)',
             }}
           />
-          <Image
+          <DocImg
             src="/crescent-mark-tight.png"
-            alt=""
-            fill
-            sizes="460px"
             className="object-contain"
             style={{ opacity: 0.2, filter: 'blur(1px)' }}
           />
@@ -344,20 +339,13 @@ export function ReportCoverPage({ report, template }: { report: InspectionReport
               'radial-gradient(78% 72% at 46% 46%, #000 52%, rgba(0,0,0,0.75) 70%, rgba(0,0,0,0.25) 88%, transparent 100%)',
           }}
         >
-          <Image
+          <DocImg
             src="/cover-car.png"
-            alt=""
-            fill
-            sizes="700px"
-            priority
             className="object-contain"
             style={{ filter: 'brightness(0.55) saturate(0.85) contrast(1.15) blur(4px)' }}
           />
-          <Image
+          <DocImg
             src="/cover-car.png"
-            alt=""
-            fill
-            sizes="700px"
             className="object-contain"
             style={{
               filter: 'brightness(0.55) saturate(0.85) contrast(1.15)',
@@ -367,11 +355,8 @@ export function ReportCoverPage({ report, template }: { report: InspectionReport
                 'radial-gradient(72% 66% at 46% 46%, #000 40%, rgba(0,0,0,0.55) 64%, transparent 84%)',
             }}
           />
-          <Image
+          <DocImg
             src="/cover-car.png"
-            alt=""
-            fill
-            sizes="700px"
             className="object-contain"
             style={{
               mixBlendMode: 'screen',
@@ -392,7 +377,7 @@ export function ReportCoverPage({ report, template }: { report: InspectionReport
 
         <div className="relative px-14 pt-[84px]">
           <span className="relative block h-[64px] w-[340px]">
-            <Image src="/logo-wordmark.png" alt="Crescent Car Check" fill sizes="340px" priority className="object-contain object-left" />
+            <DocImg src="/logo-wordmark.png" alt="Crescent Car Check" className="object-contain object-left" />
           </span>
         </div>
 
@@ -509,7 +494,7 @@ export function ReportVehicleSummaryPage({
           <div className="col-span-2">
             <div className="relative aspect-square w-full overflow-hidden rounded-xl border border-doc-border bg-doc-surface">
               {report.main_vehicle_image_url ? (
-                <Image src={report.main_vehicle_image_url} alt={vehicleTitle(report)} fill sizes="300px" className="object-cover" />
+                <DocImg src={report.main_vehicle_image_url} alt={vehicleTitle(report)} className="object-cover" />
               ) : (
                 <div className="flex h-full flex-col items-center justify-center gap-1.5 text-doc-muted">
                   <Camera size={28} />
@@ -1063,11 +1048,9 @@ export function ReportPhotoGalleryPage({
             {photos.map((p) => (
               <figure key={p.id} className="avoid-break">
                 <div className="relative aspect-[4/3] overflow-hidden rounded-lg border border-doc-border bg-doc-surface">
-                  <Image
+                  <DocImg
                     src={p.url}
                     alt={p.caption || 'Photo'}
-                    fill
-                    sizes="220px"
                     className={p.fit === 'contain' ? 'object-contain' : 'object-cover'}
                   />
                 </div>

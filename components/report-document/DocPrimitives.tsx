@@ -1,4 +1,3 @@
-import Image from 'next/image'
 import { cn } from '@/lib/utils'
 import type {
   ChecklistStatus,
@@ -6,6 +5,34 @@ import type {
   BuyerRecommendation,
 } from '@/lib/report-types'
 import { STATUS_LABEL, CONDITION_LABEL, RECOMMENDATION_LABEL } from '@/lib/report-utils'
+
+/**
+ * Plain <img> sized to fill its (positioned) parent — a print-safe stand-in for
+ * next/image `fill`. The report is rendered to PDF by headless Chromium, where
+ * next/image is an unnecessary failure surface: its client-side loader needs the
+ * Next runtime to hydrate (which a strict dev CSP can stall), it lazy-loads
+ * images below the fold (a one-shot print never scrolls them into view), and it
+ * proxies every photo through the /_next/image optimizer (an extra fetch of each
+ * signed Supabase URL on a serverless cold start). A bare <img> pointing at the
+ * already-compressed / freshly-signed URL just loads — in the browser preview and
+ * in the PDF alike. Mirrors `fill` via `absolute inset-0 h-full w-full`.
+ */
+export function DocImg({
+  src,
+  alt = '',
+  className,
+  style,
+}: {
+  src: string
+  alt?: string
+  className?: string
+  style?: React.CSSProperties
+}) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- intentional bare <img> for the print/PDF surface; see DocImg doc above.
+    <img src={src} alt={alt} className={cn('absolute inset-0 h-full w-full', className)} style={style} />
+  )
+}
 
 /** A single A4 page in the printable document. */
 export function DocPage({
@@ -22,7 +49,7 @@ export function DocPage({
     <div className={cn('report-page flex flex-col', className)}>
       {watermark && (
         <span className="pointer-events-none absolute -bottom-10 -right-10 block h-64 w-64 opacity-[0.035]">
-          <Image src="/crescent-mark-tight.png" alt="" fill sizes="256px" className="object-contain" />
+          <DocImg src="/crescent-mark-tight.png" className="object-contain" />
         </span>
       )}
       {children}
@@ -34,7 +61,7 @@ export function DocPage({
 function Wordmark({ className }: { className?: string }) {
   return (
     <span className={cn('relative block', className)}>
-      <Image src="/logo-wordmark.png" alt="Crescent Car Check" fill sizes="200px" className="object-contain object-left" />
+      <DocImg src="/logo-wordmark.png" alt="Crescent Car Check" className="object-contain object-left" />
     </span>
   )
 }

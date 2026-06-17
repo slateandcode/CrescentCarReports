@@ -12,13 +12,20 @@ const supabaseWs = supabaseOrigin ? supabaseOrigin.replace(/^https/, 'wss') : ''
 // styles; a nonce-based CSP is the follow-up. The dashboard loads no third-party
 // scripts. img/connect include the Supabase host for storage (signed photo URLs),
 // REST/auth and the realtime websocket.
+//
+// `'unsafe-eval'` is added in DEVELOPMENT ONLY: React/Next dev mode (Turbopack
+// HMR, reconstructing call stacks) calls eval(), so a strict CSP throws
+// "eval() is not supported in this environment" and breaks the dev client
+// runtime (which in turn left next/image stuck, blanking report images). React
+// never uses eval() in production, so the prod CSP stays strict.
+const isDev = process.env.NODE_ENV !== 'production'
 const csp = [
   "default-src 'self'",
   "base-uri 'self'",
   "object-src 'none'",
   "frame-ancestors 'none'",
   "form-action 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
   "style-src 'self' 'unsafe-inline'",
   `img-src 'self' data: blob:${supabaseOrigin ? ' ' + supabaseOrigin : ''}`,
   "font-src 'self' data:",
