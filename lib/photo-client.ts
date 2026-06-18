@@ -38,7 +38,21 @@ const SIGNED_URL_TTL_SECONDS = 60 * 60 * 24
  * (unsupported codec, no canvas, bigger result), so it can never break upload.
  */
 async function compressImage(file: File): Promise<File> {
-  if (!file.type.startsWith('image/') || file.size < COMPRESS_MIN_BYTES) return file
+  const name = file.name.toLowerCase()
+  const isHeicLike =
+    file.type === 'image/heic' || file.type === 'image/heif' || /\.(heic|heif)$/.test(name)
+  // Attempt a transcode for real images, for files the browser left type-less
+  // (iOS often hands picked photos with an empty MIME), and for anything that
+  // LOOKS like an image by name. createImageBitmap decodes by bytes, so this is
+  // safe — anything undecodable falls through to the catch and returns the original.
+  const looksImage =
+    file.type.startsWith('image/') ||
+    file.type === '' ||
+    /\.(heic|heif|jpe?g|png|webp|gif|bmp|tiff?)$/.test(name)
+  if (!looksImage) return file
+  // Always transcode HEIC-like / unknown-type files (Chrome can't show HEIC);
+  // only the size short-circuit is for plain images already small enough.
+  if (!isHeicLike && file.type !== '' && file.size < COMPRESS_MIN_BYTES) return file
   try {
     // `imageOrientation: 'from-image'` applies the EXIF orientation tag when
     // decoding, so phone photos (which encode rotation in EXIF rather than the
@@ -93,8 +107,15 @@ export async function uploadPhoto(file: File, target: UploadTarget): Promise<Pho
   // otherwise upload an undisplayable file that shows blank in the PDF. Reject it
   // so the inspector sees a clear message. (The common iOS path is unaffected —
   // Safari/most browsers already hand us JPEG, so `upload.type` isn't heic here.)
+  // Detect HEIC by extension too: a type-less HEIC that couldn't be transcoded
+  // above would otherwise slip past a MIME-only check and upload as a blank photo.
   const uploadType = upload.type.toLowerCase()
-  if (uploadType === 'image/heic' || uploadType === 'image/heif') {
+  const uploadName = upload.name.toLowerCase()
+  if (
+    uploadType === 'image/heic' ||
+    uploadType === 'image/heif' ||
+    /\.(heic|heif)$/.test(uploadName)
+  ) {
     throw new Error("This photo format (HEIC) isn't supported — please choose a JPEG or PNG.")
   }
 
@@ -107,7 +128,9 @@ export async function uploadPhoto(file: File, target: UploadTarget): Promise<Pho
 
   const { error: uploadErr } = await supabase.storage
     .from(PHOTO_BUCKET)
-    .upload(path, upload, { contentType: upload.type, upsert: false })
+    // Never store an empty content-type — fall back to octet-stream so the
+    // object is at least served with a concrete type.
+    .upload(path, upload, { contentType: upload.type || 'application/octet-stream', upsert: false })
   if (uploadErr) throw new Error(uploadErr.message)
 
   // Bucket is PRIVATE (migration 013): mint a signed URL so the editor can show
@@ -235,13 +258,19 @@ export async function rotatePhoto(photo: PhotoRef, degrees: 90 | -90 | 180): Pro
   return { ...photo, url, path: newPath }
 }
 
-/** Remove a photo from Storage + its metadata row. Failures are non-fatal. */
-export async function deletePhoto(photo: PhotoRef): Promise<void> {
+/**
+ * Remove a photo from Storage + its metadata row. Returns false if the storage
+ * delete failed, so a caller can keep the photo visible (and retryable) rather
+ * than orphaning a private file. MainImageUploader treats this as best-effort.
+ */
+export async function deletePhoto(photo: PhotoRef): Promise<boolean> {
   const supabase = createClient()
   try {
-    await supabase.storage.from(PHOTO_BUCKET).remove([photo.path])
+    const { error: rmErr } = await supabase.storage.from(PHOTO_BUCKET).remove([photo.path])
+    if (rmErr) return false
     await supabase.from('report_photos').delete().eq('path', photo.path)
+    return true
   } catch {
-    // Ignore — the JSON reference is removed by the caller regardless.
+    return false
   }
 }

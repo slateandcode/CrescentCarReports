@@ -21,13 +21,17 @@ export function InspectorAssign({
   const [saved, setSaved] = useState(false)
 
   function onChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const value = e.target.value
+    const select = e.target
+    const value = select.value
     setError(null)
     setSaved(false)
     startTransition(async () => {
       const res = await assignBookingInspector(bookingId, value || null)
       if (!res.ok) {
         setError(res.error || 'Could not assign inspector.')
+        // The select is uncontrolled — reset it to the persisted value so it
+        // doesn't keep displaying an inspector that wasn't actually assigned.
+        select.value = current ?? ''
         return
       }
       setSaved(true)

@@ -49,7 +49,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       },
     })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'PDF generation failed.'
-    return new Response(message, { status: 500 })
+    // Log the real error server-side, but return a generic body — never leak the
+    // internal Chromium/launch error text to the client (it can surface verbatim
+    // in the iOS viewer on a failed render).
+    console.error('[pdf] render failed', err)
+    return new Response(
+      "Could not generate the PDF. Please use your browser's Print / Save as PDF instead.",
+      { status: 500, headers: { 'Content-Type': 'text/plain' } },
+    )
   }
 }

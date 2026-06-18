@@ -4,7 +4,7 @@ import { ArrowLeft, Mail, Phone, CalendarDays, Clock, FileText, type LucideIcon 
 import { format } from 'date-fns'
 import { requireAdmin } from '@/lib/auth'
 import { getMemberById, getMemberReportCount } from '@/lib/team-data'
-import { getInspectorBookings } from '@/lib/bookings-data'
+import { getInspectorBookings, getInspectorBookingCount } from '@/lib/bookings-data'
 import { BookingCard } from '@/components/bookings/BookingCard'
 import { MemberActions } from '@/components/settings/MemberActions'
 import { RoleBadge, MemberStatusBadge } from '@/components/settings/MemberBadges'
@@ -15,10 +15,11 @@ export const dynamic = 'force-dynamic'
 export default async function MemberPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await requireAdmin()
   const { id } = await params
-  const [member, bookings, reportCount] = await Promise.all([
+  const [member, bookings, reportCount, jobCount] = await Promise.all([
     getMemberById(id),
     getInspectorBookings(id),
     getMemberReportCount(id),
+    getInspectorBookingCount(id),
   ])
   if (!member) notFound()
   const isSelf = member.id === session.id
@@ -70,7 +71,7 @@ export default async function MemberPage({ params }: { params: Promise<{ id: str
 
         <div className="mt-4 grid grid-cols-2 gap-3 border-t border-border pt-4">
           <Stat icon={FileText} label="Reports" value={reportCount} />
-          <Stat icon={CalendarDays} label="Assigned jobs" value={bookings.length} />
+          <Stat icon={CalendarDays} label="Assigned jobs" value={jobCount} />
         </div>
       </section>
 

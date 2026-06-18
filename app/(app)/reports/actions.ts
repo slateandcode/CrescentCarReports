@@ -289,6 +289,12 @@ export async function setReportStatus(
   id: string,
   status: 'draft' | 'archived',
 ): Promise<SaveResult> {
+  // TS types are erased at runtime and this is an exported server action, so
+  // enforce the allowlist — never let a crafted call slip 'completed' through
+  // here (which would bypass validateForCompletion + the completed_at stamp).
+  if (status !== 'draft' && status !== 'archived') {
+    return { ok: false, error: 'Invalid status.' }
+  }
   if (IS_DEMO) {
     const { demoSetStatus } = await import('@/lib/demo')
     demoSetStatus(id, status)

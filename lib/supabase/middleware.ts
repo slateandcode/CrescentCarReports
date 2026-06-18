@@ -126,13 +126,6 @@ export async function updateSession(request: NextRequest) {
 
   const { pathname } = request.nextUrl
   const onPublic = isPublicPath(pathname)
-  // Next.js prefetches links in the background; for those we only need the auth
-  // gate, not the inactivity/activity DB work — skip it to avoid an extra
-  // Supabase round-trip per prefetched link.
-  const isPrefetch =
-    request.headers.get('next-router-prefetch') === '1' ||
-    request.headers.get('purpose') === 'prefetch' ||
-    request.headers.get('x-purpose') === 'prefetch'
 
   // Signed out + private route → bounce to login (preserve intended path).
   if (!userId && !onPublic) {
@@ -142,7 +135,11 @@ export async function updateSession(request: NextRequest) {
     return redirectWithCookies(url, response)
   }
 
-  if (userId && !isPrefetch) {
+  // The inactivity/suspension DB work below is throttled to once per
+  // HEARTBEAT_INTERVAL_MS per session via the heartbeat cookie, so prefetches
+  // don't add real load. (Next 16 strips the next-router-prefetch Flight header
+  // before proxy runs, so a header-based prefetch skip can't work here anyway.)
+  if (userId) {
     const now = Date.now()
     // Throttle the inactivity/suspension profile read: at most once per
     // HEARTBEAT_INTERVAL_MS per session, not on every navigation. A suspension

@@ -60,7 +60,7 @@ export async function updateBookingStatus(
   const supabase = await createClient()
   const { data: existing } = await supabase
     .from('bookings')
-    .select('payment_status')
+    .select('payment_status, booking_status')
     .eq('id', id)
     .maybeSingle()
   if (!existing) return { ok: false, error: 'Booking not found.' }
@@ -69,6 +69,12 @@ export async function updateBookingStatus(
   if (status === 'cancelled') {
     update.cancelled_at = new Date().toISOString()
     if (existing.payment_status === 'paid') update.payment_status = 'refunded'
+  } else if (existing.booking_status === 'cancelled') {
+    // Reopening a cancelled booking: clear the cancellation stamp and undo the
+    // exact paid→refunded flip the cancel did (only that — a booking cancelled
+    // while pending/failed/manual keeps whatever payment status it had).
+    update.cancelled_at = null
+    if (existing.payment_status === 'refunded') update.payment_status = 'paid'
   }
 
   const { error } = await supabase.from('bookings').update(update).eq('id', id)
@@ -104,11 +110,40 @@ export async function assignBookingInspector(
     }
   }
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from('bookings')
     .update({ assigned_inspector: inspectorId })
     .eq('id', id)
+    .select('report_id')
+    .maybeSingle()
   if (error) return { ok: false, error: error.message }
+
+  // Keep the linked report's owner in sync so the newly-assigned inspector can
+  // open/edit it (reports RLS is own-or-admin — otherwise they'd be locked out
+  // while the previous inspector keeps access). Leave a COMPLETED report's
+  // authored-by attribution (shown on the delivered PDF) untouched.
+  if (updated?.report_id) {
+    const { data: report } = await supabase
+      .from('inspection_reports')
+      .select('status')
+      .eq('id', updated.report_id)
+      .maybeSingle()
+    if (report && report.status !== 'completed') {
+      const { error: syncErr } = await supabase
+        .from('inspection_reports')
+        .update({ inspector_id: inspectorId })
+        .eq('id', updated.report_id)
+      if (syncErr) {
+        // The booking was reassigned but the report's owner didn't follow — log
+        // it so a transient failure (which would re-lock the new inspector out
+        // of the report) is observable rather than silent.
+        console.error('[bookings] failed to sync report inspector after reassignment', {
+          reportId: updated.report_id,
+          error: syncErr.message,
+        })
+      }
+    }
+  }
 
   revalidateBooking(id)
   return { ok: true }
@@ -342,18 +377,40 @@ export async function createReportFromBooking(bookingId: string): Promise<Bookin
     if (b.booking_status === 'paid_new' || b.booking_status === 'time_confirmed') {
       bookingUpdate.booking_status = 'inspection_in_progress'
     }
-    const { error: linkErr } = await supabase.from('bookings').update(bookingUpdate).eq('id', bookingId)
+    // Claim the booking atomically: only link if it still has NO report. Two
+    // concurrent invocations (double-submit / retry-in-flight) would otherwise
+    // both insert a report and the later link would overwrite the earlier,
+    // orphaning one report. The `.is('report_id', null)` precondition lets the
+    // DB row lock serialize them — exactly one update matches, the other gets
+    // zero rows and discards its report in favour of the winner's.
+    const { data: claimed, error: linkErr } = await supabase
+      .from('bookings')
+      .update(bookingUpdate)
+      .eq('id', bookingId)
+      .is('report_id', null)
+      .select('id')
+      .maybeSingle()
     if (linkErr) {
-      // Roll back the just-created report. The guard above keys off
-      // bookings.report_id (which we never managed to set), so without this a
-      // retry would allocate a SECOND reference and create a duplicate report,
-      // orphaning the first. Best-effort delete so a retry starts clean.
+      // Roll back the just-created report so a retry starts clean.
       await supabase.from('inspection_reports').delete().eq('id', reportId)
       return { ok: false, error: `Could not link the report to the booking: ${linkErr.message}. Please try again.` }
     }
-
-    revalidateBooking(bookingId)
-    revalidatePath('/reports')
+    if (!claimed) {
+      // Lost the race — a concurrent invocation linked a report first. Drop ours
+      // and redirect to the existing one instead of creating a duplicate.
+      await supabase.from('inspection_reports').delete().eq('id', reportId)
+      const { data: fresh } = await supabase
+        .from('bookings')
+        .select('report_id')
+        .eq('id', bookingId)
+        .maybeSingle()
+      const existingReportId = (fresh as { report_id: string | null } | null)?.report_id
+      if (!existingReportId) return { ok: false, error: 'Could not create the report. Please try again.' }
+      reportId = existingReportId
+    } else {
+      revalidateBooking(bookingId)
+      revalidatePath('/reports')
+    }
   }
 
   redirect(`/reports/${reportId}/edit`)

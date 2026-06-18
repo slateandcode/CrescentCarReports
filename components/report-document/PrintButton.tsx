@@ -42,7 +42,22 @@ export function PrintButton({
 
   async function downloadPdf() {
     if (isAppleMobile()) {
-      window.location.href = pdfUrl
+      // iOS opens the inline PDF route in its viewer (Share → Save / WhatsApp),
+      // which a blob: URL can't replicate here. Probe the route first so a
+      // server-render failure falls back to the print dialog instead of dropping
+      // the user on a raw 500 error page. The probe warms the function, so the
+      // hand-off navigation re-renders on a warm lambda (no second cold start).
+      setBusy(true)
+      try {
+        const res = await fetch(pdfUrl, { cache: 'no-store' })
+        if (!res.ok) throw new Error('PDF unavailable')
+        window.location.href = pdfUrl
+      } catch {
+        setFallback(true)
+        window.print()
+      } finally {
+        setBusy(false)
+      }
       return
     }
     setBusy(true)

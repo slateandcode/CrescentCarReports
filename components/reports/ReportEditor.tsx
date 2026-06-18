@@ -127,6 +127,18 @@ export function ReportEditor({
   // Stop autosaving once a conflict is detected (kept in a ref so the autosave
   // effect's cleanup/closure always sees the latest value).
   const conflictRef = useRef(false)
+  // The in-flight save's promise, so flush()/onComplete() can await the REAL
+  // result instead of treating a coalesced (in-flight) call as a failure.
+  const savePromise = useRef<Promise<boolean> | null>(null)
+  // Monotonic edit counter. The value at save-start is captured in savingSeq; on
+  // resolve we only clear the dirty flag if no NEWER edit landed while the save
+  // was in flight — so a trailing edit is never reported "Saved" without being
+  // persisted (it stays dirty and the re-armed debounce retries it).
+  const editSeq = useRef(0)
+  const savingSeq = useRef(0)
+  // Always points at the latest doSave, so doSave's own re-arm timers can retry
+  // without the callback referencing itself (which the hooks linter forbids).
+  const doSaveRef = useRef<(() => Promise<boolean>) | null>(null)
 
   useEffect(() => {
     formRef.current = form
@@ -139,34 +151,64 @@ export function ReportEditor({
     }
     // A conflict is terminal until reload — never try to save over the winner.
     if (conflictRef.current) return false
-    // Coalesce overlapping saves: if one is already in flight, skip starting a
-    // second. The trailing edit stays dirty and the autosave debounce (or an
-    // explicit flush) will retry once this one settles.
-    if (inFlight.current) return false
+    // Coalesce overlapping saves: if one is already in flight, don't start a
+    // second. Re-arm the debounce so the trailing edit IS retried once the
+    // current save settles, and hand the caller the in-flight promise so an
+    // explicit flush()/complete can await the real result rather than reading
+    // this coalesced call as a failure.
+    if (inFlight.current) {
+      timer.current = setTimeout(() => void doSaveRef.current?.(), AUTOSAVE_MS)
+      return savePromise.current ?? false
+    }
     inFlight.current = true
     setSaving(true)
     setSaveState('saving')
-    const f = formRef.current
-    // Manual findings are no longer authored here — the server re-derives auto
-    // findings from Major issues.
-    const patch: ReportPatch = { ...f, critical_findings: [] }
-    const result = await saveReport(report.id, patch, baselineUpdatedAt.current)
-    inFlight.current = false
-    setSaving(false)
-    if (result.ok) {
-      // Adopt the new baseline so the next save's precondition matches.
-      if (result.updated_at) baselineUpdatedAt.current = result.updated_at
-      dirtyRef.current = false
-      setSaveState('saved')
-      return true
+    const run = (async (): Promise<boolean> => {
+      const f = formRef.current
+      // Snapshot the edit counter this save covers; a higher value on resolve
+      // means a newer edit arrived mid-flight and must not be marked saved.
+      savingSeq.current = editSeq.current
+      // Manual findings are no longer authored here — the server re-derives auto
+      // findings from Major issues.
+      const patch: ReportPatch = { ...f, critical_findings: [] }
+      const result = await saveReport(report.id, patch, baselineUpdatedAt.current)
+      inFlight.current = false
+      setSaving(false)
+      if (result.ok) {
+        // Adopt the new baseline so the next save's precondition matches.
+        if (result.updated_at) baselineUpdatedAt.current = result.updated_at
+        if (editSeq.current === savingSeq.current) {
+          // Nothing changed during the save — it's fully persisted.
+          dirtyRef.current = false
+          setSaveState('saved')
+        } else {
+          // A trailing edit landed mid-flight: keep it dirty and let the
+          // re-armed debounce (or flush) persist it next.
+          setSaveState('unsaved')
+          if (!timer.current && !conflictRef.current) {
+            timer.current = setTimeout(() => void doSaveRef.current?.(), AUTOSAVE_MS)
+          }
+        }
+        return editSeq.current === savingSeq.current
+      }
+      if (result.conflict) {
+        conflictRef.current = true
+        setConflict(true)
+      }
+      setSaveState('error')
+      return false
+    })()
+    savePromise.current = run
+    try {
+      return await run
+    } finally {
+      if (savePromise.current === run) savePromise.current = null
     }
-    if (result.conflict) {
-      conflictRef.current = true
-      setConflict(true)
-    }
-    setSaveState('error')
-    return false
   }, [report.id])
+
+  useEffect(() => {
+    doSaveRef.current = doSave
+  }, [doSave])
 
   // Flush pending edits before an in-editor client-side navigation (Preview /
   // back-to-Reports). Autosave's beforeunload only covers full page unloads, so
@@ -178,9 +220,14 @@ export function ReportEditor({
       clearTimeout(timer.current)
       timer.current = null
     }
-    if (!dirtyRef.current || conflictRef.current) return
+    if (conflictRef.current) return
     try {
-      await doSave()
+      // Let any in-flight save land first (a coalesced doSave would otherwise
+      // return immediately and we'd navigate before the write committed)…
+      if (savePromise.current) await savePromise.current
+      // …then persist the latest edit if anything is still unsaved, so the
+      // preview/PDF renders current data rather than a stale snapshot.
+      if (dirtyRef.current && !conflictRef.current) await doSave()
     } catch {
       // Swallow — navigation proceeds either way; the edit stays dirty and the
       // destination still shows the last persisted state.
@@ -197,6 +244,7 @@ export function ReportEditor({
     // A detected conflict freezes autosave until the page is reloaded.
     if (conflictRef.current) return
     dirtyRef.current = true
+    editSeq.current += 1
     setSaveState('unsaved')
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => void doSave(), AUTOSAVE_MS)
@@ -265,10 +313,23 @@ export function ReportEditor({
       return
     }
     setCompleting(true)
+    // Wait for any autosave already in flight to settle so the final save below
+    // isn't coalesced into a spurious failure, then persist the latest snapshot.
+    if (savePromise.current) {
+      try {
+        await savePromise.current
+      } catch {
+        /* fall through to the explicit save */
+      }
+    }
     const saved = await doSave()
     if (!saved) {
       setCompleting(false)
-      setCompleteError('Could not save before completing. Try again.')
+      setCompleteError(
+        conflictRef.current
+          ? 'This report was changed elsewhere. Reload to get the latest version.'
+          : 'Could not save before completing. Try again.',
+      )
       return
     }
     const result = await completeReport(report.id)

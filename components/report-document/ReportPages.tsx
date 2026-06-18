@@ -790,7 +790,10 @@ export function ReportExteriorPage({ report, index }: { report: InspectionReport
   const issuesFlagged = exteriorTally.minor + exteriorTally.major
   const exteriorScore = Math.max(
     0,
-    sectionScore(checklist['exterior'] || {}) - paintDeductionsFor(checklist[PAINT_SECTION_ID]),
+    // Pass the section id so deductions are tallied over current-template items
+    // only (matching the Executive Summary card + SectionScoreHeader); without
+    // it, orphaned legacy keys would make this pill disagree with the summary.
+    sectionScore(checklist['exterior'] || {}, 'exterior') - paintDeductionsFor(checklist[PAINT_SECTION_ID]),
   )
 
   return (

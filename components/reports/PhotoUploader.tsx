@@ -68,8 +68,15 @@ export function PhotoUploader({
   }
 
   async function remove(photo: PhotoRef) {
+    setError(null)
     onRemove(photo)
-    await deletePhoto(photo)
+    const ok = await deletePhoto(photo)
+    if (!ok) {
+      // Storage delete failed — re-add so the photo (and a retry handle)
+      // reappears instead of silently orphaning a private PII file.
+      onAdd([photo])
+      setError("Couldn't remove that photo — please try again.")
+    }
   }
 
   return (

@@ -96,7 +96,9 @@ export async function getBookingStats(): Promise<BookingStats> {
   if (IS_DEMO) return { today: 0, upcoming: 0, newPaid: 0 }
   const supabase = await createClient()
   const today = dubaiToday()
-  const weekAhead = addDaysISO(today, 7)
+  // today + the next 6 days = 7 calendar days inclusive (matches the "Next 7
+  // days" card label and the BookingStats.upcoming doc comment).
+  const weekAhead = addDaysISO(today, 6)
 
   const [todayRes, upcomingRes, newPaidRes] = await Promise.all([
     supabase
@@ -224,6 +226,21 @@ export async function getInspectorBookings(inspectorId: string): Promise<Booking
     .order('inspection_date', { ascending: false })
     .limit(50)
   return (data as BookingWithInspector[]) || []
+}
+
+/**
+ * Exact count of all bookings assigned to one inspector. getInspectorBookings
+ * caps its list at 50 rows for rendering, so its length undercounts a busy
+ * inspector — use this for the "Assigned jobs" stat instead.
+ */
+export async function getInspectorBookingCount(inspectorId: string): Promise<number> {
+  if (IS_DEMO) return 0
+  const supabase = await createClient()
+  const { count } = await supabase
+    .from('bookings')
+    .select('id', { count: 'exact', head: true })
+    .eq('assigned_inspector', inspectorId)
+  return count || 0
 }
 
 /** Active inspectors for assignment dropdowns (admin UI). */
