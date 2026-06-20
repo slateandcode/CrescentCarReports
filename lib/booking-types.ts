@@ -67,6 +67,19 @@ export interface Booking {
   travel_fee: number
   total_price: number
 
+  // ── Actual payment, after a Stripe promotion code (migration 017) ──
+  // IMPORTANT: amount_paid and discount_amount are in FILS (1 AED = 100 fils),
+  // NOT AED like the price columns above — a percentage code can yield a
+  // fractional-AED amount, so they're stored fils-exact. Use aedFromFils() to
+  // display, and NEVER sum them against the AED columns. NULL on older / manual
+  // bookings → fall back to total_price.
+  /** What Stripe actually charged after a promo code, in FILS (NULL = unknown). */
+  amount_paid: number | null
+  /** Promotion-code saving in FILS (NULL or 0 = no code used). */
+  discount_amount: number | null
+  /** Promotion code the customer entered, e.g. 'CRESCENT50' (NULL = none). */
+  promo_code: string | null
+
   stripe_session_id: string | null
   stripe_payment_intent_id: string | null
   payment_status: PaymentStatus
@@ -150,6 +163,31 @@ export function googleMapsUrl(
     return `https://www.google.com/maps?q=${b.location_lat},${b.location_lng}`
   }
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${b.address}, ${b.emirate}`)}`
+}
+
+/**
+ * Formats a FILS money value (amount_paid / discount_amount) as an AED string.
+ * Shows up to 2 decimals only when a percentage code left a fractional amount
+ * (whole dirhams stay clean). Returns '—' for NULL. Mirrors the website's aed().
+ */
+export function aedFromFils(fils: number | null | undefined): string {
+  if (fils == null) return '—'
+  const aed = fils / 100
+  return `AED ${Number.isInteger(aed) ? aed : aed.toFixed(2)}`
+}
+
+/** True when a booking was paid with a promotion-code discount worth surfacing. */
+export function hasDiscount(b: Pick<Booking, 'discount_amount'>): boolean {
+  return b.discount_amount != null && b.discount_amount > 0
+}
+
+/**
+ * Single gate for the discounted-price UI: a real discount AND a known paid
+ * amount. Both the list card and the detail page use this so they can never
+ * disagree (e.g. show a struck price on one view and a blank "—" on the other).
+ */
+export function showsDiscount(b: Pick<Booking, 'discount_amount' | 'amount_paid'>): boolean {
+  return hasDiscount(b) && b.amount_paid != null
 }
 
 /** True for a live (unexpired) 30-minute payment hold from the public website. */

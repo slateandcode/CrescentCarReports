@@ -11,6 +11,8 @@ import {
   PAYMENT_STATUS_LABELS,
   googleMapsUrl,
   isLongDistance,
+  showsDiscount,
+  aedFromFils,
 } from '@/lib/booking-types'
 import {
   BookingStatusBadge,
@@ -153,7 +155,19 @@ export default async function BookingDetailPage({
                     label="Travel fee"
                     value={b.travel_fee > 0 ? `AED ${b.travel_fee}` : 'None'}
                   />
-                  <BookingDetailField label="Total" value={`AED ${b.total_price}`} />
+                  <BookingDetailField
+                    label={showsDiscount(b) ? 'List total' : 'Total'}
+                    value={`AED ${b.total_price}`}
+                  />
+                  {showsDiscount(b) && (
+                    <>
+                      {b.promo_code && (
+                        <BookingDetailField label="Promo code" value={b.promo_code} mono />
+                      )}
+                      <BookingDetailField label="Discount" value={`− ${aedFromFils(b.discount_amount)}`} />
+                      <BookingDetailField label="Amount paid" value={aedFromFils(b.amount_paid)} />
+                    </>
+                  )}
                   <BookingDetailField label="Payment" value={PAYMENT_STATUS_LABELS[b.payment_status]} />
                   <BookingDetailField label="Booking status" value={STATUS_LABELS[b.booking_status]} />
                   {paidText && <BookingDetailField label="Paid at" value={paidText} />}

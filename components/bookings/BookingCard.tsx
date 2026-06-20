@@ -1,7 +1,14 @@
 import Link from 'next/link'
 import { User, Phone, Calendar, Clock, MapPin, UserCog } from 'lucide-react'
 import { format } from 'date-fns'
-import { SLOTS, isLongDistance, isLiveHold, type BookingWithInspector } from '@/lib/booking-types'
+import {
+  SLOTS,
+  isLongDistance,
+  isLiveHold,
+  showsDiscount,
+  aedFromFils,
+  type BookingWithInspector,
+} from '@/lib/booking-types'
 import {
   BookingStatusBadge,
   PaymentStatusBadge,
@@ -78,7 +85,19 @@ export function BookingCard({
           <div className="flex flex-wrap items-center gap-2">
             <PaymentStatusBadge status={b.payment_status} />
             {b.manual_booking && <ManualBookingTag />}
-            <span className="text-sm font-semibold text-text-primary">AED {b.total_price}</span>
+            {showsDiscount(b) ? (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="text-sm font-semibold text-text-primary">
+                  {aedFromFils(b.amount_paid)}
+                </span>
+                <span className="text-xs text-text-muted line-through">AED {b.total_price}</span>
+                <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[11px] font-medium text-accent">
+                  {b.promo_code ?? 'Discount'}
+                </span>
+              </span>
+            ) : (
+              <span className="text-sm font-semibold text-text-primary">AED {b.total_price}</span>
+            )}
           </div>
           <span className="inline-flex items-center gap-1.5 text-xs text-text-muted">
             <UserCog size={13} />
