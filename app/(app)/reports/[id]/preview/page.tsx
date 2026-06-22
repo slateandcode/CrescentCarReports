@@ -5,12 +5,20 @@ import { requireUser } from '@/lib/auth'
 import { getReportWithInspector } from '@/lib/data'
 import { ReportDocument } from '@/components/report-document/ReportDocument'
 import { PrintButton } from '@/components/report-document/PrintButton'
+import { AutoPrint } from '@/components/report-document/AutoPrint'
 
 export const metadata = { title: 'Report preview' }
 export const dynamic = 'force-dynamic'
 
-export default async function PreviewPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PreviewPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ print?: string }>
+}) {
   const { id } = await params
+  const { print } = await searchParams
   await requireUser()
   const result = await getReportWithInspector(id)
   if (!result) notFound()
@@ -18,6 +26,7 @@ export default async function PreviewPage({ params }: { params: Promise<{ id: st
 
   return (
     <div>
+      {print === '1' && <AutoPrint />}
       {/* Toolbar — hidden in print */}
       <div className="no-print mb-4">
         <div className="flex flex-wrap items-center justify-between gap-3">

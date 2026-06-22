@@ -1,5 +1,6 @@
 'use client'
 
+import { memo } from 'react'
 import { ClipboardCheck, Info } from 'lucide-react'
 import type { SectionDef, ChecklistItemDef } from '@/lib/report-templates'
 import type { ChecklistItemState, ChecklistStatus, PaintCondition } from '@/lib/report-types'
@@ -54,7 +55,7 @@ function SectionHeaderBadge({
   )
 }
 
-export function ChecklistSection({
+export const ChecklistSection = memo(function ChecklistSection({
   reportId,
   section,
   state,
@@ -65,7 +66,11 @@ export function ChecklistSection({
   reportId: string
   section: SectionDef
   state: SectionState
+  // Receives sectionId so the parent can pass ONE stable callback (setItem) for
+  // every section — keeping this prop's identity stable lets React.memo skip
+  // unchanged sections.
   onItemChange: (
+    sectionId: string,
     itemId: string,
     next: ChecklistItemState | ((prev: ChecklistItemState) => ChecklistItemState),
   ) => void
@@ -116,7 +121,7 @@ export function ChecklistSection({
               sectionId={section.id}
               item={item}
               state={state[item.id] ?? {}}
-              onChange={(next) => onItemChange(item.id, next)}
+              onChange={(next) => onItemChange(section.id, item.id, next)}
               commonIssues={commonIssuesForItem(section.id, item.id)}
               tyre={isTyres && TYRE_IDS.has(item.id)}
               accident={isAccident}
@@ -126,4 +131,4 @@ export function ChecklistSection({
       </div>
     </SectionAccordion>
   )
-}
+})

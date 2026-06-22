@@ -39,30 +39,54 @@ export function PhotoUploader({
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [adjustingId, setAdjustingId] = useState<string | null>(null)
   // Always read the live copy from props so adjuster edits show immediately.
   const adjusting = adjustingId ? photos.find((p) => p.id === adjustingId) : undefined
 
+  /** Upload up to this many photos at once — overlaps the network round-trips so a
+   *  multi-photo batch finishes far quicker than the old one-at-a-time loop. */
+  const UPLOAD_CONCURRENCY = 3
+
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return
+    const list = Array.from(files)
     setBusy(true)
     setError(null)
-    // Collect every upload and append the whole batch in ONE onAdd call. Appending
-    // per-file would make each call close over the same stale parent array (await
-    // yields between iterations), so only the last photo would survive.
-    const added: PhotoRef[] = []
-    try {
-      for (const file of Array.from(files)) {
-        const ref = await uploadPhoto(file, { reportId, ...target })
-        added.push(ref)
+    setProgress({ done: 0, total: list.length })
+    // Results are slotted by index so the batch keeps file order regardless of
+    // which upload finishes first, then appended in ONE onAdd call (appending
+    // per-file would close over a stale parent array and lose all but the last).
+    const added: (PhotoRef | undefined)[] = new Array(list.length)
+    let firstError: string | null = null
+    let done = 0
+    let next = 0
+    const runOne = async (): Promise<void> => {
+      for (;;) {
+        const i = next++
+        if (i >= list.length) return
+        try {
+          added[i] = await uploadPhoto(list[i], { reportId, ...target })
+        } catch (e) {
+          if (!firstError) firstError = e instanceof Error ? e.message : 'Upload failed.'
+        } finally {
+          done += 1
+          setProgress({ done, total: list.length })
+        }
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Upload failed.')
+    }
+    try {
+      await Promise.all(
+        Array.from({ length: Math.min(UPLOAD_CONCURRENCY, list.length) }, runOne),
+      )
     } finally {
-      // Persist whatever uploaded, even if a later file in the batch failed.
-      if (added.length) onAdd(added)
+      const ok = added.filter((p): p is PhotoRef => Boolean(p))
+      // Persist whatever uploaded, even if some files in the batch failed.
+      if (ok.length) onAdd(ok)
+      if (firstError) setError(firstError)
       setBusy(false)
+      setProgress(null)
       if (inputRef.current) inputRef.current.value = ''
     }
   }
@@ -124,7 +148,9 @@ export function PhotoUploader({
           )}
         >
           {busy ? <Loader2 size={20} className="animate-spin" /> : <Camera size={20} />}
-          <span>{busy ? 'Uploading' : label}</span>
+          <span>
+            {busy ? (progress && progress.total > 1 ? `${progress.done}/${progress.total}` : 'Uploading') : label}
+          </span>
         </button>
       </div>
 

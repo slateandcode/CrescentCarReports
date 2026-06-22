@@ -149,7 +149,14 @@
    ─────────────────────────────────────────────────────────────── */
 .report-page {
   width: 210mm;
-  min-height: 297mm;
+  /* Fixed height (not min-height): a min-height box GROWS past A4 when content
+     overflows, and `overflow:hidden` can't clip a grown box — so in paged media
+     one page spanned two sheets and the absolute footer landed alone on the
+     spillover sheet (the blank/footer-only pages bug). A fixed height + clip means
+     each .report-page is exactly one A4 sheet; the footer never spills. Content is
+     pre-paginated into page-sized chunks (lib/report-paginate.ts) so this clip only
+     ever trims a sliver of whitespace, never real content. */
+  height: 297mm;
   margin: 0 auto;
   background: #ffffff;
   color: #0a0a0a;

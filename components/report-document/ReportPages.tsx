@@ -73,6 +73,15 @@ import {
   type CornerStatuses,
   type PaintMap,
 } from './CarDiagrams'
+import {
+  buildSectionBlocks,
+  paginateSectionBlocks,
+  paginatePhotos,
+  paginateNotes,
+  splitChunk,
+  SECTION_CONT_MM,
+  type SectionBlock,
+} from '@/lib/report-paginate'
 
 // ════════════════════════════════════════════════════════════════════════
 // Shared building blocks
@@ -149,7 +158,10 @@ function ItemPhotos({ photos, alt }: { photos?: PhotoRef[]; alt: string }) {
   const list = photos ?? []
   if (list.length === 0) return null
   return (
-    <div className="mt-2.5 flex flex-wrap gap-2">
+    // avoid-break keeps a photo row from splitting across a page boundary (the
+    // "photo cut in half" bug). Belt-and-braces with the chunker, which already
+    // keeps a card whole on one page.
+    <div className="avoid-break mt-2.5 flex flex-wrap gap-2">
       {list.map((p) => (
         <figure key={p.id} className="w-32">
           <div className="relative h-24 w-32 overflow-hidden rounded-lg border border-doc-border bg-doc-surface">
@@ -581,6 +593,9 @@ function MetaRow({ icon, label, value, mono }: { icon: React.ReactNode; label: s
 // ════════════════════════════════════════════════════════════════════════
 // Page 3: Executive Summary (Crescent Score)
 // ════════════════════════════════════════════════════════════════════════
+/** Max "Key Issues" rows on the single-page summary before a "+N more" line —
+ *  sized to fit alongside the hero + section cards on one A4 sheet. */
+const EXEC_KEY_ISSUE_LIMIT = 6
 export function ReportExecutiveSummaryPage({
   report,
   template,
@@ -648,12 +663,15 @@ export function ReportExecutiveSummaryPage({
           ))}
         </div>
 
-        {/* Key issues */}
+        {/* Key issues — capped so the one-page summary never overflows its fixed
+            A4 sheet (every issue is still shown in full on its detailed section
+            page). A remainder line points the reader there instead of silently
+            dropping issues, as the old hard slice(0,5) did. */}
         {majorFindings.length > 0 && (
           <>
             <MiniHeading className="mt-6">Key Issues</MiniHeading>
             <div className="space-y-1.5">
-              {majorFindings.slice(0, 5).map((f) => (
+              {majorFindings.slice(0, EXEC_KEY_ISSUE_LIMIT).map((f) => (
                 <div key={f.id} className="avoid-break flex items-start gap-2.5 rounded-lg border-l-[3px] border-fail bg-doc-surface px-3.5 py-2">
                   <AlertTriangle size={14} className="mt-0.5 shrink-0 text-fail" />
                   <div className="min-w-0">
@@ -665,6 +683,13 @@ export function ReportExecutiveSummaryPage({
                   </div>
                 </div>
               ))}
+              {majorFindings.length > EXEC_KEY_ISSUE_LIMIT && (
+                <p className="pt-0.5 text-[11px] font-medium text-doc-muted">
+                  + {majorFindings.length - EXEC_KEY_ISSUE_LIMIT} more major{' '}
+                  {majorFindings.length - EXEC_KEY_ISSUE_LIMIT === 1 ? 'issue' : 'issues'} detailed in the
+                  sections that follow.
+                </p>
+              )}
             </div>
           </>
         )}
@@ -674,8 +699,28 @@ export function ReportExecutiveSummaryPage({
   )
 }
 
+/** Render one paginated chunk's blocks in the canonical issues → evidence →
+ *  passes order (the chunk is a contiguous slice of that order, so filtering
+ *  preserves it). Used by every section that flows onto "(continued)" pages. */
+function SectionChunkBody({ chunk }: { chunk: SectionBlock[] }) {
+  const { issues, evidence, passes } = splitChunk(chunk)
+  return (
+    <div className="space-y-3">
+      {issues.map((it, i) => (
+        <IssueCard key={`i-${i}`} title={it.title} state={it.state} />
+      ))}
+      {evidence.map((it, i) => (
+        <PassEvidenceCard key={`e-${i}`} title={it.title} state={it.state} />
+      ))}
+      <PassList titles={passes} />
+    </div>
+  )
+}
+
 // ════════════════════════════════════════════════════════════════════════
 // Generic scored-section page (Interior, Engine Bay, Underbody, etc.)
+// One section can now emit several A4 pages — long sections flow onto
+// "(continued)" pages instead of overflowing a single fixed-height sheet.
 // ════════════════════════════════════════════════════════════════════════
 export function ScoredSectionPage({
   report,
@@ -690,31 +735,34 @@ export function ScoredSectionPage({
   if (!section) return null
   const { issues, passEvidence, passes, graded } = splitItems(report, section)
 
-  return (
-    <DocPage watermark={graded === 0}>
+  if (graded === 0) {
+    return (
+      <DocPage watermark>
+        <DocHeader label={section.title} />
+        <div className="flex flex-1 flex-col px-12 pt-9 pb-14">
+          <DocSectionTitle index={index}>{section.title}</DocSectionTitle>
+          <EmptySection label={section.title} />
+        </div>
+        <DocFooter reference={report.report_reference} note={section.title} />
+      </DocPage>
+    )
+  }
+
+  const chunks = paginateSectionBlocks(buildSectionBlocks({ issues, passEvidence, passes }))
+  return chunks.map((chunk, ci) => (
+    <DocPage key={ci}>
       <DocHeader label={section.title} />
       <div className="flex flex-1 flex-col px-12 pt-9 pb-14">
-        <DocSectionTitle index={index}>{section.title}</DocSectionTitle>
-        {graded === 0 ? (
-          <EmptySection label={section.title} />
-        ) : (
-          <>
-            <SectionScoreHeader report={report} sectionId={section.id} items={section.items} />
-            <div className="space-y-3">
-              {issues.map((it, i) => (
-                <IssueCard key={i} title={it.title} state={it.state} />
-              ))}
-              {passEvidence.map((it, i) => (
-                <PassEvidenceCard key={`pe-${i}`} title={it.title} state={it.state} />
-              ))}
-              <PassList titles={passes} />
-            </div>
-          </>
-        )}
+        <DocSectionTitle index={ci === 0 ? index : undefined}>
+          {section.title}
+          {ci > 0 ? ' (continued)' : ''}
+        </DocSectionTitle>
+        {ci === 0 && <SectionScoreHeader report={report} sectionId={section.id} items={section.items} />}
+        <SectionChunkBody chunk={chunk} />
       </div>
       <DocFooter reference={report.report_reference} note={section.title} />
     </DocPage>
-  )
+  ))
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -725,38 +773,49 @@ export function ReportAccidentHistoryPage({ report, index }: { report: Inspectio
   if (!section) return null
   const { issues, passEvidence, passes, graded } = splitItems(report, section)
 
-  return (
-    <DocPage watermark={graded === 0}>
+  if (graded === 0) {
+    return (
+      <DocPage watermark>
+        <DocHeader label="Accident History" />
+        <div className="flex flex-1 flex-col px-12 pt-9 pb-14">
+          <DocSectionTitle index={index}>Accident History Search</DocSectionTitle>
+          <AccidentNotice />
+          <EmptySection label="Accident history" />
+        </div>
+        <DocFooter reference={report.report_reference} note="Accident history" />
+      </DocPage>
+    )
+  }
+
+  // leadMm reserves first-page space for the "Important" notice, which only shows
+  // on page 1 (continuation pages skip it).
+  const chunks = paginateSectionBlocks(buildSectionBlocks({ issues, passEvidence, passes }), { leadMm: 26 })
+  return chunks.map((chunk, ci) => (
+    <DocPage key={ci}>
       <DocHeader label="Accident History" />
       <div className="flex flex-1 flex-col px-12 pt-9 pb-14">
-        <DocSectionTitle index={index}>Accident History Search</DocSectionTitle>
-
-        {graded > 0 && <SectionScoreHeader report={report} sectionId={section.id} items={section.items} />}
-
-        <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-doc-border bg-doc-surface px-4 py-3">
-          <Info size={16} className="mt-0.5 shrink-0 text-accent" />
-          <p className="text-[12px] leading-relaxed text-doc-ink">
-            <span className="font-semibold">Important:</span> no accident record found does not guarantee the car has
-            never been involved in an accident. It only means no accident record was found in the sources checked.
-          </p>
-        </div>
-
-        {graded === 0 ? (
-          <EmptySection label="Accident history" />
-        ) : (
-          <div className="space-y-3">
-            {issues.map((it, i) => (
-              <IssueCard key={i} title={it.title} state={it.state} />
-            ))}
-            {passEvidence.map((it, i) => (
-              <PassEvidenceCard key={`pe-${i}`} title={it.title} state={it.state} />
-            ))}
-            <PassList titles={passes} />
-          </div>
-        )}
+        <DocSectionTitle index={ci === 0 ? index : undefined}>
+          Accident History Search{ci > 0 ? ' (continued)' : ''}
+        </DocSectionTitle>
+        {ci === 0 && <SectionScoreHeader report={report} sectionId={section.id} items={section.items} />}
+        {ci === 0 && <AccidentNotice />}
+        <SectionChunkBody chunk={chunk} />
       </div>
       <DocFooter reference={report.report_reference} note="Accident history" />
     </DocPage>
+  ))
+}
+
+/** The standing "no record ≠ never crashed" disclaimer on the accident page. */
+function AccidentNotice() {
+  return (
+    <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-doc-border bg-doc-surface px-4 py-3">
+      <Info size={16} className="mt-0.5 shrink-0 text-accent" />
+      <p className="text-[12px] leading-relaxed text-doc-ink">
+        <span className="font-semibold">Important:</span> no accident record found does not guarantee the car has never
+        been involved in an accident. It only means no accident record was found in the sources checked.
+      </p>
+    </div>
   )
 }
 
@@ -884,6 +943,32 @@ export function ReportExteriorPage({ report, index }: { report: InspectionReport
 // ════════════════════════════════════════════════════════════════════════
 // Tyres, Rims & Brakes (wheel diagram + per-corner cards)
 // ════════════════════════════════════════════════════════════════════════
+/** Bordered brake-item list (title + comment + status + photos). */
+function BrakesList({ items }: { items: { title: string; state: ChecklistItemState }[] }) {
+  return (
+    <div className="rounded-xl border border-doc-border">
+      {items.length > 0 ? (
+        items.map((it, i) => (
+          <div key={i} className="avoid-break border-b border-doc-border px-3.5 py-2 last:border-0">
+            <div className="flex items-start gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-[12px] font-medium text-doc-ink">{it.title}</p>
+                {itemComment(it.state) && (
+                  <p className="mt-0.5 text-[11px] leading-snug text-doc-muted">{itemComment(it.state)}</p>
+                )}
+              </div>
+              <DocStatusBadge status={itemStatus(it.state) as ChecklistStatus} />
+            </div>
+            <ItemPhotos photos={it.state.photos} alt={it.title} />
+          </div>
+        ))
+      ) : (
+        <p className="px-3.5 py-2.5 text-[11px] text-doc-muted">Brakes not separately graded.</p>
+      )}
+    </div>
+  )
+}
+
 export function ReportTyresBrakesPage({ report, index }: { report: InspectionReport; index: string }) {
   const checklist = report.checklist || {}
   const section = getTemplate(report.package_type).sections.find((s) => s.id === 'tyres-brakes')
@@ -906,14 +991,36 @@ export function ReportTyresBrakesPage({ report, index }: { report: InspectionRep
   const brakeIds = ['brake-pads', 'brake-discs', 'brake-vibration']
   const brakeItems = section.items.filter((it) => brakeIds.includes(it.id) && itemStatus(state[it.id]))
 
-  return (
-    <DocPage>
+  // The corner-card grid + brakes share the right column; estimate how much the
+  // 2×2 corner grid consumes so brakes that don't fit flow onto a continuation
+  // page instead of clipping (the "brake photo cut in half" bug).
+  const cornerCardMm = (c: { id: string; rim: string }) => {
+    const photos = (state[c.id]?.photos?.length ?? 0) + (state[c.rim]?.photos?.length ?? 0)
+    return 24 + photos * 28 + (itemComment(state[c.id]) ? 6 : 0) // narrow card → ~1 photo per row
+  }
+  const cornerBlockMm =
+    8 +
+    Math.max(cornerCardMm(cornerDefs[0]), cornerCardMm(cornerDefs[1])) +
+    Math.max(cornerCardMm(cornerDefs[2]), cornerCardMm(cornerDefs[3]))
+
+  const brakeBlocks: SectionBlock[] = brakeItems.map((it) => ({
+    kind: 'evidence',
+    title: it.title,
+    state: state[it.id] as ChecklistItemState,
+  }))
+  const brakeChunks =
+    brakeBlocks.length > 0 ? paginateSectionBlocks(brakeBlocks, { leadMm: cornerBlockMm + 10 }) : [[]]
+  const firstBrakes = splitChunk(brakeChunks[0]).evidence
+  const contChunks = brakeChunks.slice(1)
+  // If the corner grid leaves no room at all, push every brake to the continuation.
+  const brakesOnFirst = firstBrakes.length > 0 || brakeItems.length === 0
+
+  const pages = [
+    <DocPage key="tyres-0">
       <DocHeader label="Tyres & Brakes" />
-      <div className="flex-1 px-12 pt-9 pb-14">
+      <div className="flex flex-1 flex-col px-12 pt-9 pb-14">
         <DocSectionTitle index={index}>Tyres, Rims &amp; Brakes</DocSectionTitle>
-
         <SectionScoreHeader report={report} sectionId={section.id} items={section.items} />
-
         <div className="grid grid-cols-5 gap-8">
           <div className="col-span-2 flex flex-col items-center">
             <WheelLayout corners={corners} />
@@ -921,7 +1028,6 @@ export function ReportTyresBrakesPage({ report, index }: { report: InspectionRep
               <DiagramLegend />
             </div>
           </div>
-
           <div className="col-span-3">
             <MiniHeading>Tyres &amp; Rims</MiniHeading>
             <div className="grid grid-cols-2 gap-3">
@@ -929,34 +1035,34 @@ export function ReportTyresBrakesPage({ report, index }: { report: InspectionRep
                 <CornerTyreCard key={c.id} label={c.label} tyre={state[c.id]} rim={state[c.rim]} />
               ))}
             </div>
-
-            <MiniHeading className="mt-6">Brakes</MiniHeading>
-            <div className="rounded-xl border border-doc-border">
-              {brakeItems.length > 0 ? (
-                brakeItems.map((it) => (
-                  <div key={it.id} className="border-b border-doc-border px-3.5 py-2 last:border-0">
-                    <div className="flex items-start gap-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[12px] font-medium text-doc-ink">{it.title}</p>
-                        {itemComment(state[it.id]) && (
-                          <p className="mt-0.5 text-[11px] leading-snug text-doc-muted">{itemComment(state[it.id])}</p>
-                        )}
-                      </div>
-                      <DocStatusBadge status={itemStatus(state[it.id]) as ChecklistStatus} />
-                    </div>
-                    <ItemPhotos photos={state[it.id]?.photos} alt={it.title} />
-                  </div>
-                ))
-              ) : (
-                <p className="px-3.5 py-2.5 text-[11px] text-doc-muted">Brakes not separately graded.</p>
-              )}
-            </div>
+            {brakesOnFirst && (
+              <>
+                <MiniHeading className="mt-6">Brakes</MiniHeading>
+                <BrakesList items={firstBrakes} />
+              </>
+            )}
           </div>
         </div>
       </div>
       <DocFooter reference={report.report_reference} note="Tyres & brakes" />
-    </DocPage>
-  )
+    </DocPage>,
+  ]
+
+  contChunks.forEach((chunk, ci) => {
+    pages.push(
+      <DocPage key={`tyres-${ci + 1}`}>
+        <DocHeader label="Tyres & Brakes" />
+        <div className="flex flex-1 flex-col px-12 pt-9 pb-14">
+          <DocSectionTitle>Tyres, Rims &amp; Brakes (continued)</DocSectionTitle>
+          <MiniHeading>Brakes</MiniHeading>
+          <BrakesList items={splitChunk(chunk).evidence} />
+        </div>
+        <DocFooter reference={report.report_reference} note="Tyres & brakes" />
+      </DocPage>,
+    )
+  })
+
+  return pages
 }
 
 function CornerTyreCard({ label, tyre, rim }: { label: string; tyre?: ChecklistItemState; rim?: ChecklistItemState }) {
@@ -988,41 +1094,63 @@ function CornerTyreCard({ label, tyre, rim }: { label: string; tyre?: ChecklistI
 // ════════════════════════════════════════════════════════════════════════
 // Endoscopic Camera Evidence (Premium, if applicable)
 // ════════════════════════════════════════════════════════════════════════
+/** One endoscopic-evidence card (title + comment + photos). */
+function EndoscopicCard({ title, state }: { title: string; state: ChecklistItemState }) {
+  const status = itemStatus(state)
+  return (
+    <div className="avoid-break rounded-xl border border-doc-border bg-doc-surface p-4">
+      <div className="flex items-center justify-between gap-2">
+        <p className="font-bold text-doc-ink">{title}</p>
+        {status && <DocStatusBadge status={status} />}
+      </div>
+      {itemComment(state) && <p className="mt-1 text-[12.5px] leading-relaxed text-doc-ink">{itemComment(state)}</p>}
+      <ItemPhotos photos={state.photos} alt={title} />
+    </div>
+  )
+}
+
 export function ReportEndoscopicPage({ report, index }: { report: InspectionReport; index: string }) {
   const section = getTemplate(report.package_type).sections.find((s) => s.id === 'endoscopic')
   if (!section) return null
   const state = report.checklist?.['endoscopic'] || {}
   const graded = section.items.filter((it) => itemStatus(state[it.id]) || (state[it.id]?.photos?.length ?? 0) > 0)
 
-  return (
-    <DocPage watermark={graded.length === 0}>
+  if (graded.length === 0) {
+    return (
+      <DocPage watermark>
+        <DocHeader label="Endoscopic Evidence" />
+        <div className="flex flex-1 flex-col px-12 pt-9 pb-14">
+          <DocSectionTitle index={index}>Endoscopic Camera Evidence</DocSectionTitle>
+          <EmptySection label="Endoscopic inspection" />
+        </div>
+        <DocFooter reference={report.report_reference} note="Endoscopic evidence" />
+      </DocPage>
+    )
+  }
+
+  // No score header on this section, so the first page gets the full (continued) budget.
+  const blocks: SectionBlock[] = graded.map((it) => ({
+    kind: 'evidence',
+    title: it.title,
+    state: state[it.id] as ChecklistItemState,
+  }))
+  const chunks = paginateSectionBlocks(blocks, { firstMm: SECTION_CONT_MM })
+  return chunks.map((chunk, ci) => (
+    <DocPage key={ci}>
       <DocHeader label="Endoscopic Evidence" />
       <div className="flex flex-1 flex-col px-12 pt-9 pb-14">
-        <DocSectionTitle index={index}>Endoscopic Camera Evidence</DocSectionTitle>
-        {graded.length === 0 ? (
-          <EmptySection label="Endoscopic inspection" />
-        ) : (
-          <div className="space-y-3">
-            {graded.map((it) => {
-              const st = state[it.id]
-              const status = itemStatus(st)
-              return (
-                <div key={it.id} className="avoid-break rounded-xl border border-doc-border bg-doc-surface p-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="font-bold text-doc-ink">{it.title}</p>
-                    {status && <DocStatusBadge status={status} />}
-                  </div>
-                  {itemComment(st) && <p className="mt-1 text-[12.5px] leading-relaxed text-doc-ink">{itemComment(st)}</p>}
-                  <ItemPhotos photos={st?.photos} alt={it.title} />
-                </div>
-              )
-            })}
-          </div>
-        )}
+        <DocSectionTitle index={ci === 0 ? index : undefined}>
+          Endoscopic Camera Evidence{ci > 0 ? ' (continued)' : ''}
+        </DocSectionTitle>
+        <div className="space-y-3">
+          {splitChunk(chunk).evidence.map((it, i) => (
+            <EndoscopicCard key={i} title={it.title} state={it.state} />
+          ))}
+        </div>
       </div>
       <DocFooter reference={report.report_reference} note="Endoscopic evidence" />
     </DocPage>
-  )
+  ))
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -1039,33 +1167,46 @@ export function ReportPhotoGalleryPage({
   title: string
   photos: PhotoRef[]
 }) {
-  return (
-    <DocPage watermark={photos.length === 0}>
+  if (photos.length === 0) {
+    return (
+      <DocPage watermark>
+        <DocHeader label="Photo Gallery" />
+        <div className="flex flex-1 flex-col px-12 pt-9 pb-14">
+          <DocSectionTitle index={index}>{title}</DocSectionTitle>
+          <EmptySection label={title} />
+        </div>
+        <DocFooter reference={report.report_reference} note={title} />
+      </DocPage>
+    )
+  }
+
+  const chunks = paginatePhotos(photos)
+  return chunks.map((chunk, ci) => (
+    <DocPage key={ci}>
       <DocHeader label="Photo Gallery" />
       <div className="flex flex-1 flex-col px-12 pt-9 pb-14">
-        <DocSectionTitle index={index}>{title}</DocSectionTitle>
-        {photos.length === 0 ? (
-          <EmptySection label={title} />
-        ) : (
-          <div className="grid grid-cols-3 gap-3">
-            {photos.map((p) => (
-              <figure key={p.id} className="avoid-break">
-                <div className="relative aspect-[4/3] overflow-hidden rounded-lg border border-doc-border bg-doc-surface">
-                  <DocImg
-                    src={p.url}
-                    alt={p.caption || 'Photo'}
-                    className={p.fit === 'contain' ? 'object-contain' : 'object-cover'}
-                  />
-                </div>
-                {p.caption && <figcaption className="mt-1.5 text-[10.5px] text-doc-muted">{p.caption}</figcaption>}
-              </figure>
-            ))}
-          </div>
-        )}
+        <DocSectionTitle index={ci === 0 ? index : undefined}>
+          {title}
+          {ci > 0 ? ' (continued)' : ''}
+        </DocSectionTitle>
+        <div className="grid grid-cols-3 gap-3">
+          {chunk.map((p) => (
+            <figure key={p.id} className="avoid-break">
+              <div className="relative aspect-[4/3] overflow-hidden rounded-lg border border-doc-border bg-doc-surface">
+                <DocImg
+                  src={p.url}
+                  alt={p.caption || 'Photo'}
+                  className={p.fit === 'contain' ? 'object-contain' : 'object-cover'}
+                />
+              </div>
+              {p.caption && <figcaption className="mt-1.5 text-[10.5px] text-doc-muted">{p.caption}</figcaption>}
+            </figure>
+          ))}
+        </div>
       </div>
       <DocFooter reference={report.report_reference} note={title} />
     </DocPage>
-  )
+  ))
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -1083,57 +1224,81 @@ export function ReportFinalNotesPage({
   const completed = report.completed_at ? format(new Date(report.completed_at), 'd MMMM yyyy') : null
   const score = overallScore(report.package_type, report.checklist || {})
   const rec = normalizeRecommendation(report.buyer_recommendation) ?? recommendationFromScore(score)
+  const showRec = template.recommendationEnabled && Boolean(rec)
 
-  return (
-    <DocPage watermark>
+  const notes: { title: string; body: string }[] = []
+  if (report.inspector_summary?.trim()) notes.push({ title: 'Inspector notes', body: report.inspector_summary })
+  if (report.price_negotiation_notes?.trim() && template.negotiationNotesEnabled)
+    notes.push({ title: 'Price negotiation notes', body: report.price_negotiation_notes })
+
+  const recBox = showRec && rec ? (
+    <div className="mb-6 flex items-center gap-4 rounded-2xl border border-doc-border bg-doc-surface px-5 py-4">
+      <div>
+        <p className="text-[9.5px] font-semibold uppercase tracking-[0.2em] text-doc-muted">Buyer recommendation</p>
+        <p className="mt-1 text-[15px] font-extrabold text-doc-ink">{RECOMMENDATION_LABEL[rec]}</p>
+      </div>
+      <div className="ml-auto flex items-center gap-3">
+        {score != null && <span className="tnum text-[15px] font-extrabold text-doc-ink">{score}/100</span>}
+        <RecommendationBadge recommendation={rec} />
+      </div>
+    </div>
+  ) : null
+
+  const issuedBox = (
+    <div className="mt-auto rounded-2xl border border-doc-border bg-doc-surface px-5 py-4">
+      <div className="flex items-center gap-2 text-[13px] font-semibold text-doc-ink">
+        <ShieldCheck size={16} className="text-pass" />
+        {completed ? `Report issued on ${completed}.` : 'Report prepared by Crescent Car Check.'}
+      </div>
+      <p className="mt-1.5 text-[11px] text-doc-muted">
+        Reference {report.report_reference} · {template.name} · {template.pointLabel}
+      </p>
+    </div>
+  )
+
+  // Notes are unbounded free text — paginate so a long summary flows onto
+  // "(continued)" pages instead of clipping. The recommendation box is first-page
+  // lead; the issued box packs as a trailing block (its own page only if needed).
+  const pages = paginateNotes(notes, {
+    firstMm: SECTION_CONT_MM - (showRec ? 34 : 0),
+    contMm: SECTION_CONT_MM,
+    issuedMm: 30,
+  })
+
+  return pages.map((page, pi) => (
+    <DocPage key={pi} watermark>
       <DocHeader label="Recommendation" />
       <div className="flex flex-1 flex-col px-12 pt-9 pb-14">
-        <DocSectionTitle index={index}>Final Recommendation &amp; Inspector Notes</DocSectionTitle>
+        <DocSectionTitle index={pi === 0 ? index : undefined}>
+          Final Recommendation &amp; Inspector Notes{pi > 0 ? ' (continued)' : ''}
+        </DocSectionTitle>
 
-        {template.recommendationEnabled && rec && (
-          <div className="mb-6 flex items-center gap-4 rounded-2xl border border-doc-border bg-doc-surface px-5 py-4">
-            <div>
-              <p className="text-[9.5px] font-semibold uppercase tracking-[0.2em] text-doc-muted">Buyer recommendation</p>
-              <p className="mt-1 text-[15px] font-extrabold text-doc-ink">{RECOMMENDATION_LABEL[rec]}</p>
-            </div>
-            <div className="ml-auto flex items-center gap-3">
-              {score != null && (
-                <span className="tnum text-[15px] font-extrabold text-doc-ink">{score}/100</span>
-              )}
-              <RecommendationBadge recommendation={rec} />
-            </div>
-          </div>
-        )}
+        {pi === 0 && recBox}
 
         <div className="space-y-5">
-          {report.inspector_summary && <Callout title="Inspector notes">{report.inspector_summary}</Callout>}
-          {report.price_negotiation_notes && template.negotiationNotesEnabled && (
-            <Callout title="Price negotiation notes">{report.price_negotiation_notes}</Callout>
-          )}
-          {!report.inspector_summary && !report.price_negotiation_notes && (
+          {page.runs.map((run, i) => (
+            <Callout key={i} title={run.title}>
+              {run.text}
+            </Callout>
+          ))}
+          {pi === 0 && notes.length === 0 && (
             <p className="text-[13px] text-doc-muted">No additional notes recorded.</p>
           )}
         </div>
 
-        <div className="mt-auto rounded-2xl border border-doc-border bg-doc-surface px-5 py-4">
-          <div className="flex items-center gap-2 text-[13px] font-semibold text-doc-ink">
-            <ShieldCheck size={16} className="text-pass" />
-            {completed ? `Report issued on ${completed}.` : 'Report prepared by Crescent Car Check.'}
-          </div>
-          <p className="mt-1.5 text-[11px] text-doc-muted">
-            Reference {report.report_reference} · {template.name} · {template.pointLabel}
-          </p>
-        </div>
+        {page.issued && issuedBox}
       </div>
       <DocFooter reference={report.report_reference} note="Recommendation" />
     </DocPage>
-  )
+  ))
 }
 
-function Callout({ title, children }: { title: string; children: React.ReactNode }) {
+function Callout({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
     <div className="avoid-break rounded-2xl border-l-[3px] border-accent bg-doc-surface px-5 py-4">
-      <p className="mb-1.5 text-[9.5px] font-semibold uppercase tracking-[0.2em] text-doc-muted">{title}</p>
+      {title && (
+        <p className="mb-1.5 text-[9.5px] font-semibold uppercase tracking-[0.2em] text-doc-muted">{title}</p>
+      )}
       <p className="whitespace-pre-line text-[12.5px] leading-relaxed text-doc-ink">{children}</p>
     </div>
   )

@@ -93,7 +93,15 @@ export async function getReports(filters: ReportFilters): Promise<InspectionRepo
     return list
   }
   const supabase = await createClient()
-  let query = supabase.from('inspection_reports').select('*')
+  // List cards only need these scalar columns — selecting '*' pulled the heavy
+  // per-row `checklist` / `critical_findings` / `photos` JSON for up to 200 rows,
+  // which dominated the reports-page payload and load time. (Filters below still
+  // query other columns server-side; they don't need to be selected.)
+  let query = supabase
+    .from('inspection_reports')
+    .select(
+      'id, report_reference, status, package_type, customer_name, plate_number, vehicle_make, vehicle_model, vehicle_year, created_at, updated_at',
+    )
 
   if (filters.status && filters.status !== 'all') {
     query = query.eq('status', filters.status)

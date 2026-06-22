@@ -27,6 +27,10 @@ export function PrintButton({
   const [fallback, setFallback] = useState(false)
 
   const pdfUrl = `/reports/${reportId}/pdf`
+  // Cap the probe so a slow/stuck serverless cold-start can't spin forever — the
+  // "download just spins on phone" report. Generous enough for a real cold start
+  // (which maxDuration on the route covers), then we fall back.
+  const PROBE_TIMEOUT_MS = 40000
 
   // iOS Safari (incl. iPadOS, which reports as "MacIntel" + touch) ignores the
   // <a download> attribute and won't save a blob: URL, so the blob path below
@@ -40,21 +44,44 @@ export function PrintButton({
     )
   }
 
+  async function fetchWithTimeout(url: string) {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), PROBE_TIMEOUT_MS)
+    try {
+      return await fetch(url, { cache: 'no-store', signal: ctrl.signal })
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  // Fallback when the server PDF is unavailable: print the CLEAN, paginated report
+  // document — never the editor form. window.print() on the editor (the reported
+  // "it just prints the editor page" bug) is replaced by navigating to the bare
+  // preview surface with ?print=1, which auto-opens the print dialog there.
+  function fallbackPrint() {
+    if (typeof window === 'undefined') return
+    if (window.location.pathname.includes(`/reports/${reportId}/preview`)) {
+      window.print()
+    } else {
+      window.location.href = `/reports/${reportId}/preview?print=1`
+    }
+  }
+
   async function downloadPdf() {
     if (isAppleMobile()) {
       // iOS opens the inline PDF route in its viewer (Share → Save / WhatsApp),
       // which a blob: URL can't replicate here. Probe the route first so a
-      // server-render failure falls back to the print dialog instead of dropping
-      // the user on a raw 500 error page. The probe warms the function, so the
-      // hand-off navigation re-renders on a warm lambda (no second cold start).
+      // server-render failure falls back to the clean print path instead of
+      // dropping the user on a raw 500 error page. The probe warms the function,
+      // so the hand-off navigation re-renders on a warm lambda (no second cold start).
       setBusy(true)
       try {
-        const res = await fetch(pdfUrl, { cache: 'no-store' })
+        const res = await fetchWithTimeout(pdfUrl)
         if (!res.ok) throw new Error('PDF unavailable')
         window.location.href = pdfUrl
       } catch {
         setFallback(true)
-        window.print()
+        fallbackPrint()
       } finally {
         setBusy(false)
       }
@@ -62,7 +89,7 @@ export function PrintButton({
     }
     setBusy(true)
     try {
-      const res = await fetch(pdfUrl, { cache: 'no-store' })
+      const res = await fetchWithTimeout(pdfUrl)
       if (!res.ok) throw new Error(await res.text().catch(() => 'PDF generation failed'))
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
@@ -74,9 +101,9 @@ export function PrintButton({
       a.remove()
       URL.revokeObjectURL(url)
     } catch {
-      // Server render unavailable — fall back to the browser print dialog.
+      // Server render unavailable — fall back to printing the clean report.
       setFallback(true)
-      window.print()
+      fallbackPrint()
     } finally {
       setBusy(false)
     }
@@ -85,7 +112,7 @@ export function PrintButton({
   return (
     <button
       type="button"
-      onClick={fallback ? () => window.print() : downloadPdf}
+      onClick={fallback ? fallbackPrint : downloadPdf}
       disabled={busy}
       className={className ?? 'btn-primary'}
       title={fallback ? 'Open the browser print dialog' : 'Download a print-ready A4 PDF'}

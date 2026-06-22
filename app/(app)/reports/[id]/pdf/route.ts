@@ -7,6 +7,13 @@ import { createPdfToken } from '@/lib/pdf-token'
 // Needs the Node runtime (spawns a Chrome process) and must never be cached.
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+// Headless-Chromium PDF generation is slow on a serverless cold start: the
+// @sparticuz/chromium-min pack (~50MB) is fetched to /tmp, then the image-heavy
+// report is rendered. The platform default (~10s on Netlify) kills that mid-flight,
+// which 500s the route and drops the client onto the window.print() fallback (the
+// "prints the editor / weird format" bug). The Netlify Next runtime reads this
+// export to size the function timeout. Keep it generous; a warm render is fast.
+export const maxDuration = 60
 
 /**
  * GET /reports/:id/pdf — returns a true A4 PDF of the report, rendered

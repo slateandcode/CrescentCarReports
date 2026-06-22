@@ -30,6 +30,67 @@ const COMPRESS_QUALITY = 0.85
  */
 const SIGNED_URL_TTL_SECONDS = 60 * 60 * 24
 
+// ─── Off-main-thread image processing (lib/photo-worker.ts) ──────────────────
+// Decoding/scaling/re-encoding a big photo on the main thread froze mobile UIs.
+// We run it on a Web Worker when available and fall back to the main thread
+// otherwise, so this is a pure performance layer, never a correctness dependency.
+let _worker: Worker | null = null
+let _workerBroken = false
+let _reqId = 0
+const _pending = new Map<number, (blob: Blob | null) => void>()
+
+function getWorker(): Worker | null {
+  if (_workerBroken) return null
+  if (
+    typeof window === 'undefined' ||
+    typeof Worker === 'undefined' ||
+    typeof OffscreenCanvas === 'undefined'
+  ) {
+    return null
+  }
+  if (!_worker) {
+    try {
+      _worker = new Worker(new URL('./photo-worker.ts', import.meta.url), { type: 'module' })
+      _worker.onmessage = (e: MessageEvent<{ id: number; ok: boolean; blob?: Blob }>) => {
+        const { id, ok, blob } = e.data
+        const cb = _pending.get(id)
+        if (cb) {
+          _pending.delete(id)
+          cb(ok && blob ? blob : null)
+        }
+      }
+      _worker.onerror = () => {
+        _workerBroken = true
+        for (const cb of _pending.values()) cb(null)
+        _pending.clear()
+        _worker = null
+      }
+    } catch {
+      _workerBroken = true
+      _worker = null
+    }
+  }
+  return _worker
+}
+
+/** Re-encode (and optionally rotate) an image on the worker; resolves null when a
+ *  worker isn't available so the caller can use the main-thread path. */
+function processInWorker(blob: Blob, degrees = 0): Promise<Blob | null> {
+  const w = getWorker()
+  if (!w) return Promise.resolve(null)
+  return new Promise((resolve) => {
+    const id = ++_reqId
+    _pending.set(id, resolve)
+    setTimeout(() => {
+      if (_pending.has(id)) {
+        _pending.delete(id)
+        resolve(null)
+      }
+    }, 20000)
+    w.postMessage({ id, blob, maxEdge: COMPRESS_MAX_EDGE, quality: COMPRESS_QUALITY, degrees })
+  })
+}
+
 /**
  * Downscale + re-encode a camera photo in the browser before upload. A modern
  * phone shot is 4–12 MB; at A4 print size 2000px/JPEG-0.85 looks identical but
@@ -53,6 +114,20 @@ async function compressImage(file: File): Promise<File> {
   // Always transcode HEIC-like / unknown-type files (Chrome can't show HEIC);
   // only the size short-circuit is for plain images already small enough.
   if (!isHeicLike && file.type !== '' && file.size < COMPRESS_MIN_BYTES) return file
+
+  // Prefer the worker so the heavy decode/encode is off the main thread. Its
+  // output is always JPEG, so a worker success also handles the HEIC transcode on
+  // browsers that can decode it. Keep the original only when the re-encode didn't
+  // help AND the source is already a displayable typed image.
+  const workerBlob = await processInWorker(file)
+  if (workerBlob) {
+    if (workerBlob.size >= file.size && !isHeicLike && file.type !== '') return file
+    return new File([workerBlob], file.name.replace(/\.[^.]+$/, '') + '.jpg', {
+      type: 'image/jpeg',
+      lastModified: file.lastModified,
+    })
+  }
+
   try {
     // `imageOrientation: 'from-image'` applies the EXIF orientation tag when
     // decoding, so phone photos (which encode rotation in EXIF rather than the
@@ -195,32 +270,37 @@ export async function rotatePhoto(photo: PhotoRef, degrees: 90 | -90 | 180): Pro
 
   const resp = await fetch(photo.url, { cache: 'no-store' })
   if (!resp.ok) throw new Error('Could not load the photo to rotate.')
-  // `imageOrientation: 'from-image'` so the source's EXIF orientation is honoured
-  // before we apply the explicit rotation on top (matches compressImage).
-  const bitmap = await createImageBitmap(await resp.blob(), { imageOrientation: 'from-image' })
+  const srcBlob = await resp.blob()
 
-  // Downscale oversized originals while we're re-encoding anyway.
-  const scale = Math.min(1, COMPRESS_MAX_EDGE / Math.max(bitmap.width, bitmap.height))
-  const w = Math.max(1, Math.round(bitmap.width * scale))
-  const h = Math.max(1, Math.round(bitmap.height * scale))
-  const quarter = degrees === 90 || degrees === -90
+  // Prefer the worker (off the main thread); fall back to a main-thread canvas.
+  let blob: Blob | null = await processInWorker(srcBlob, degrees)
+  if (!blob) {
+    // `imageOrientation: 'from-image'` so the source's EXIF orientation is honoured
+    // before we apply the explicit rotation on top (matches compressImage).
+    const bitmap = await createImageBitmap(srcBlob, { imageOrientation: 'from-image' })
+    // Downscale oversized originals while we're re-encoding anyway.
+    const scale = Math.min(1, COMPRESS_MAX_EDGE / Math.max(bitmap.width, bitmap.height))
+    const w = Math.max(1, Math.round(bitmap.width * scale))
+    const h = Math.max(1, Math.round(bitmap.height * scale))
+    const quarter = degrees === 90 || degrees === -90
 
-  const canvas = document.createElement('canvas')
-  canvas.width = quarter ? h : w
-  canvas.height = quarter ? w : h
-  const ctx = canvas.getContext('2d')
-  if (!ctx) {
+    const canvas = document.createElement('canvas')
+    canvas.width = quarter ? h : w
+    canvas.height = quarter ? w : h
+    const ctx = canvas.getContext('2d')
+    if (!ctx) {
+      bitmap.close?.()
+      throw new Error('Canvas is not available in this browser.')
+    }
+    ctx.translate(canvas.width / 2, canvas.height / 2)
+    ctx.rotate((degrees * Math.PI) / 180)
+    ctx.drawImage(bitmap, -w / 2, -h / 2, w, h)
     bitmap.close?.()
-    throw new Error('Canvas is not available in this browser.')
-  }
-  ctx.translate(canvas.width / 2, canvas.height / 2)
-  ctx.rotate((degrees * Math.PI) / 180)
-  ctx.drawImage(bitmap, -w / 2, -h / 2, w, h)
-  bitmap.close?.()
 
-  const blob = await new Promise<Blob | null>((resolve) =>
-    canvas.toBlob(resolve, 'image/jpeg', COMPRESS_QUALITY),
-  )
+    blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, 'image/jpeg', COMPRESS_QUALITY),
+    )
+  }
   if (!blob) throw new Error('Could not rotate the photo.')
 
   // Upload the rotated copy next to the old file (same report folder, new name).

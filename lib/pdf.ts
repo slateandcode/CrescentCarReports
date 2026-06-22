@@ -95,7 +95,32 @@ export async function renderUrlToPdf(
     const page = await browser.newPage()
     // Resolve the target now (post-launch) so a token thunk is minted fresh.
     const target = typeof url === 'function' ? await url() : url
-    await page.goto(target, { waitUntil: 'networkidle0', timeout: 25000 })
+    // `load` fires deterministically once the document + its eager <img> tags are
+    // fetched. `networkidle0` (the old setting) waits for 500ms of *zero* network
+    // activity, which an image-heavy page on warm Supabase connections can fail to
+    // reach — it then hit the timeout and 500'd. After `load`, explicitly await
+    // every image's decode so no photo paints half-drawn in the PDF (the report's
+    // <img> are eager, so decode resolves promptly; failures are swallowed so one
+    // broken signed URL can't abort the whole render).
+    await page.goto(target, { waitUntil: 'load', timeout: 45000 })
+    await page.evaluate(async () => {
+      const imgs = Array.from(document.images)
+      // Defeat loading="lazy" for the one-shot render: force eager and ensure each
+      // image has actually loaded (not just that the load event fired), so no photo
+      // paints blank in the PDF.
+      await Promise.all(
+        imgs.map((img) => {
+          try {
+            img.loading = 'eager'
+          } catch {}
+          if (img.complete) return img.decode().catch(() => undefined)
+          return new Promise<void>((resolve) => {
+            img.addEventListener('load', () => resolve(), { once: true })
+            img.addEventListener('error', () => resolve(), { once: true })
+          })
+        }),
+      )
+    })
     const pdf = await page.pdf({
       printBackground: true,
       preferCSSPageSize: true,

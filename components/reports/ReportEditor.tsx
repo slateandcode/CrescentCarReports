@@ -56,6 +56,9 @@ type Form = Pick<
   photos: PhotoRef[]
 }
 
+/** Shared stable reference for an unset section's state (see usage by memo). */
+const EMPTY_SECTION_STATE: Record<string, ChecklistItemState> = {}
+
 export function ReportEditor({
   report,
   inspectorName,
@@ -276,22 +279,28 @@ export function ReportEditor({
   // the async photo handlers: an upload that resolves after the inspector has
   // edited the same item must merge against the LATEST item state, not the stale
   // render-time closure (which would clobber the just-typed comment/status).
-  function setItem(
-    sectionId: string,
-    itemId: string,
-    next: ChecklistItemState | ((prev: ChecklistItemState) => ChecklistItemState),
-  ) {
-    setForm((prev) => {
-      const section = prev.checklist[sectionId] || {}
-      const current = section[itemId] || {}
-      const value = typeof next === 'function' ? next(current) : next
-      return {
-        ...prev,
-        checklist: { ...prev.checklist, [sectionId]: { ...section, [itemId]: value } },
-      }
-    })
-  }
-  function setPaint(panelId: string, condition: PaintCondition) {
+  // Stable across renders (setForm is stable) so memoized ChecklistSections only
+  // re-render when their own data changes — a keystroke in one section no longer
+  // re-renders all nine sections and their hundreds of item cards.
+  const setItem = useCallback(
+    (
+      sectionId: string,
+      itemId: string,
+      next: ChecklistItemState | ((prev: ChecklistItemState) => ChecklistItemState),
+    ) => {
+      setForm((prev) => {
+        const section = prev.checklist[sectionId] || {}
+        const current = section[itemId] || {}
+        const value = typeof next === 'function' ? next(current) : next
+        return {
+          ...prev,
+          checklist: { ...prev.checklist, [sectionId]: { ...section, [itemId]: value } },
+        }
+      })
+    },
+    [],
+  )
+  const setPaint = useCallback((panelId: string, condition: PaintCondition) => {
     setForm((prev) => ({
       ...prev,
       checklist: {
@@ -302,7 +311,7 @@ export function ReportEditor({
         },
       },
     }))
-  }
+  }, [])
 
   async function onComplete() {
     setCompleteError(null)
@@ -570,9 +579,15 @@ export function ReportEditor({
                 key={section.id}
                 reportId={report.id}
                 section={section}
-                state={form.checklist[section.id] || {}}
-                onItemChange={(itemId, next) => setItem(section.id, itemId, next)}
-                paintState={section.kind === 'exterior' ? form.checklist[PAINT_SECTION_ID] || {} : undefined}
+                // EMPTY_SECTION_STATE keeps an unset section's prop identity stable
+                // across renders so React.memo can skip it (a fresh `|| {}` would not).
+                state={form.checklist[section.id] || EMPTY_SECTION_STATE}
+                onItemChange={setItem}
+                paintState={
+                  section.kind === 'exterior'
+                    ? form.checklist[PAINT_SECTION_ID] || EMPTY_SECTION_STATE
+                    : undefined
+                }
                 onPaintChange={section.kind === 'exterior' ? setPaint : undefined}
               />
             ))}

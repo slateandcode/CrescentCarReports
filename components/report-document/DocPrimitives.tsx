@@ -29,8 +29,21 @@ export function DocImg({
   style?: React.CSSProperties
 }) {
   return (
+    // loading="lazy" defers off-screen photos on the on-screen preview (a report
+    // with many photos otherwise fires a big network waterfall on open). It is
+    // SAFE for the PDF: Chromium's print path force-loads native lazy images
+    // (unlike next/image's JS IntersectionObserver lazy, which caused the old
+    // blank-PDF-image bug), and lib/pdf.ts additionally forces eager + awaits load
+    // before page.pdf(). decoding="async" keeps decode off the critical path.
     // eslint-disable-next-line @next/next/no-img-element -- intentional bare <img> for the print/PDF surface; see DocImg doc above.
-    <img src={src} alt={alt} className={cn('absolute inset-0 h-full w-full', className)} style={style} />
+    <img
+      src={src}
+      alt={alt}
+      loading="lazy"
+      decoding="async"
+      className={cn('absolute inset-0 h-full w-full', className)}
+      style={style}
+    />
   )
 }
 
