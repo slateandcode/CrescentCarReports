@@ -23,6 +23,13 @@
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
+# Standalone background function (netlify/functions/render-report-pdf-background.mts)
+# pre-renders report PDFs with headless Chromium. Ship Chromium/puppeteer as
+# node_modules instead of letting esbuild bundle their native/dynamic internals.
+[functions]
+  node_bundler = "esbuild"
+  external_node_modules = ["@sparticuz/chromium-min", "puppeteer-core"]
+
 # PDF rendering (/reports/:id/pdf) spawns headless Chromium. On a cold start
 # @sparticuz/chromium-min downloads a ~50MB pack from CHROMIUM_PACK_URL (pinned
 # to the exact installed chromium-min version). To keep that within the function

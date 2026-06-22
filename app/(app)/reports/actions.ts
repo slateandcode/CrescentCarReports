@@ -223,6 +223,29 @@ export async function saveReport(
 }
 
 /** Validate + mark a report completed. */
+/**
+ * Fire-and-forget: ask the background function to pre-render this report's PDF
+ * into the cache so the next (often mobile) download is instant instead of waiting
+ * on a cold-start Chromium render. Awaits only the 202 ack; the render runs in the
+ * background function's own lifecycle. Never throws into the caller — the download
+ * route still renders on demand if this didn't run (e.g. local dev, where there's
+ * no Netlify functions runtime).
+ */
+async function triggerPdfPrerender(id: string): Promise<void> {
+  const secret = process.env.PDF_TOKEN_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY
+  const base = (process.env.NEXT_PUBLIC_APP_URL || process.env.URL || '').replace(/\/$/, '')
+  if (!secret || !base) return
+  try {
+    await fetch(`${base}/.netlify/functions/render-report-pdf-background`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reportId: id, auth: secret }),
+    })
+  } catch {
+    // Best-effort pre-warm; the download route renders on demand if it didn't run.
+  }
+}
+
 export async function completeReport(id: string): Promise<SaveResult> {
   if (IS_DEMO) {
     const { demoGetReport, demoSetStatus } = await import('@/lib/demo')
@@ -261,6 +284,10 @@ export async function completeReport(id: string): Promise<SaveResult> {
   revalidatePath('/reports')
   revalidatePath('/dashboard')
   revalidatePath(`/reports/${id}/preview`)
+
+  // Pre-render the PDF into the cache so the download is instant for the inspector
+  // and the customer (the report is final at completion).
+  await triggerPdfPrerender(id)
   return { ok: true }
 }
 
