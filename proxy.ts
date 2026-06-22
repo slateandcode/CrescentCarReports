@@ -8,6 +8,10 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Run on everything except Next internals, the icon, and static assets.
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|icon.png|.*\\.(?:png|jpg|jpeg|svg|webp|ico)$).*)'],
+  // Run on everything except Next internals, the icon, static assets, and Netlify
+  // platform paths. `.netlify/functions/*` (e.g. the background PDF renderer) must
+  // bypass the auth redirect — those functions do their own secret-based auth.
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|icon.png|\\.netlify|.*\\.(?:png|jpg|jpeg|svg|webp|ico)$).*)',
+  ],
 }
