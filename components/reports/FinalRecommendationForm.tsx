@@ -3,6 +3,7 @@
 import { Sparkles } from 'lucide-react'
 import type { BuyerRecommendation } from '@/lib/report-types'
 import { RECOMMENDATION_LABEL } from '@/lib/report-utils'
+import { PolishButton } from './PolishButton'
 import { cn } from '@/lib/utils'
 
 const RECOMMENDATION_OPTIONS: { value: BuyerRecommendation; active: string }[] = [
@@ -79,29 +80,41 @@ export function FinalRecommendationForm({
         </div>
       )}
 
-      <label className="block">
-        <span className="label-base">Inspector notes</span>
+      <div>
+        <div className="flex items-center justify-between gap-2">
+          <p className="label-base !mb-0">Inspector notes</p>
+          <PolishButton
+            text={values.inspector_summary ?? ''}
+            onPolished={(text) => onPatch({ inspector_summary: text })}
+          />
+        </div>
         <textarea
           value={values.inspector_summary ?? ''}
           onChange={(e) => onPatch({ inspector_summary: e.target.value })}
           placeholder="Overall comment for the buyer — anything that doesn't fit the tick-boxes…"
-          className="input-base min-h-[120px] resize-y"
+          className="input-base mt-1.5 min-h-[120px] resize-y"
         />
-      </label>
+      </div>
 
       {flags.negotiationNotesEnabled && (
-        <label className="block">
-          <span className="label-base">
-            Price negotiation notes
-            <span className="font-normal normal-case text-text-muted"> (Premium)</span>
-          </span>
+        <div>
+          <div className="flex items-center justify-between gap-2">
+            <p className="label-base !mb-0">
+              Price negotiation notes
+              <span className="font-normal normal-case text-text-muted"> (Premium)</span>
+            </p>
+            <PolishButton
+              text={values.price_negotiation_notes ?? ''}
+              onPolished={(text) => onPatch({ price_negotiation_notes: text })}
+            />
+          </div>
           <textarea
             value={values.price_negotiation_notes ?? ''}
             onChange={(e) => onPatch({ price_negotiation_notes: e.target.value })}
             placeholder="Suggested negotiation points based on the findings…"
-            className="input-base min-h-[88px] resize-y"
+            className="input-base mt-1.5 min-h-[88px] resize-y"
           />
-        </label>
+        </div>
       )}
 
     </div>

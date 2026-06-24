@@ -13,6 +13,13 @@
 #                                          (lib/pdf-token.ts). Optional — falls back to
 #                                          SUPABASE_SERVICE_ROLE_KEY, but set a dedicated
 #                                          one so rotating the DB key can't break PDFs.
+#   GROQ_API_KEY                        -> Groq API key for the "Polish with AI" button
+#                                          (app/api/polish-comment). Get one free at
+#                                          https://console.groq.com/keys . Server-only —
+#                                          do NOT prefix with NEXT_PUBLIC.
+#   GROQ_MODEL                          -> Optional. Defaults to llama-3.3-70b-versatile
+#                                          (free tier). Override with another free model
+#                                          (e.g. openai/gpt-oss-120b) if preferred.
 # Plus any auth / Google Calendar / Sentry keys the app uses.
 # Don't commit real secrets to this file.
 

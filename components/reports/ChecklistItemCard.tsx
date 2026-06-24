@@ -8,6 +8,7 @@ import { itemStatus, isIssue, decodeDot } from '@/lib/report-utils'
 import { generateComment, generateAccidentComment, ACCIDENT_PRESETS, type AccidentPreset } from '@/lib/issues'
 import { StatusSegmentedControl } from './StatusControl'
 import { PhotoUploader } from './PhotoUploader'
+import { PolishButton } from './PolishButton'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -183,15 +184,18 @@ export function ChecklistItemCard({
         {status && (
           <div className="mt-3 space-y-3 border-t border-border pt-3">
             <div>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <p className="label-base !mb-0">Report comment</p>
-                <button
-                  type="button"
-                  onClick={regenerateAccident}
-                  className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:text-accent-hover"
-                >
-                  <Wand2 size={12} /> Auto-write
-                </button>
+                <div className="flex items-center gap-3">
+                  <PolishButton text={state.comment ?? ''} onPolished={setComment} />
+                  <button
+                    type="button"
+                    onClick={regenerateAccident}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:text-accent-hover"
+                  >
+                    <Wand2 size={12} /> Auto-write
+                  </button>
+                </div>
               </div>
               <textarea
                 value={state.comment ?? ''}
@@ -201,15 +205,18 @@ export function ChecklistItemCard({
               />
             </div>
 
-            <label className="block">
-              <span className="label-base">Inspector note (optional)</span>
+            <div>
+              <div className="flex items-center justify-between gap-2">
+                <p className="label-base !mb-0">Inspector note (optional)</p>
+                <PolishButton text={state.notes ?? ''} onPolished={setNotes} />
+              </div>
               <textarea
                 value={state.notes ?? ''}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Internal note / extra detail…"
-                className="input-base min-h-[48px] resize-y text-sm"
+                className="input-base mt-1.5 min-h-[48px] resize-y text-sm"
               />
-            </label>
+            </div>
 
             <div>
               <p className="label-base flex items-center gap-1.5">
@@ -327,15 +334,18 @@ export function ChecklistItemCard({
           </label>
 
           <div>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <p className="label-base !mb-0">Report comment</p>
-              <button
-                type="button"
-                onClick={regenerate}
-                className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:text-accent-hover"
-              >
-                <Wand2 size={12} /> Auto-write
-              </button>
+              <div className="flex items-center gap-3">
+                <PolishButton text={state.comment ?? ''} onPolished={setComment} />
+                <button
+                  type="button"
+                  onClick={regenerate}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:text-accent-hover"
+                >
+                  <Wand2 size={12} /> Auto-write
+                </button>
+              </div>
             </div>
             <textarea
               value={state.comment ?? ''}
@@ -345,15 +355,18 @@ export function ChecklistItemCard({
             />
           </div>
 
-          <label className="block">
-            <span className="label-base">Inspector note (optional)</span>
+          <div>
+            <div className="flex items-center justify-between gap-2">
+              <p className="label-base !mb-0">Inspector note (optional)</p>
+              <PolishButton text={state.notes ?? ''} onPolished={setNotes} />
+            </div>
             <textarea
               value={state.notes ?? ''}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Internal note / extra detail…"
-              className="input-base min-h-[48px] resize-y text-sm"
+              className="input-base mt-1.5 min-h-[48px] resize-y text-sm"
             />
-          </label>
+          </div>
         </div>
       )}
 
