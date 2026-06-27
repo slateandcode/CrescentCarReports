@@ -1,0 +1,21 @@
+-- ════════════════════════════════════════════════════════════════════════
+-- 019 — Revoke anon/authenticated table grants on rate_limits (least privilege)
+--
+-- DEFENSE-IN-DEPTH (low severity). rate_limits is an internal counter table
+-- reached ONLY through the SECURITY DEFINER check_rate_limit() RPC (migration
+-- 014), which runs as owner and so needs no direct table grant for anon /
+-- authenticated. RLS is already enabled with NO policies (deny-all), so those
+-- roles cannot read/write rows today. But Supabase grants table privileges to
+-- anon/authenticated by default, so the grants still exist — and if RLS were
+-- ever toggled off on this table they would become live. Strip them so the
+-- table matches report_counters (which correctly has no such grants) and access
+-- stays exclusively through the RPC.
+--
+-- service_role + postgres KEEP their grants (not in the revoke list); the
+-- check_rate_limit() EXECUTE grant is separate and untouched, so the website's
+-- rate limiting is unaffected.
+--
+-- Idempotent: REVOKE is a no-op when the grant is already absent. Safe to re-run.
+-- ════════════════════════════════════════════════════════════════════════
+
+revoke all on table public.rate_limits from anon, authenticated;
