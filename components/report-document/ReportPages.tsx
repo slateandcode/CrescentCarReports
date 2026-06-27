@@ -37,6 +37,7 @@ import {
   normalizeRecommendation,
   deriveAutoFindings,
   itemStatus,
+  effectiveStatus,
   itemComment,
   itemNote,
   decodeDot,
@@ -113,7 +114,12 @@ function SectionScoreHeader({
   const checklist = report.checklist || {}
   const state = checklist[sectionId] || {}
   const score = sectionScore(state, sectionId)
-  const tally = sectionCounts(checklist, sectionId)
+  // Tally over THIS package's (tier-filtered) `items` so the numerator matches the
+  // denominator (items.length). sectionCounts() iterates the full, tier-unfiltered
+  // library, which over-counts premium-only items on a Standard report (e.g. it
+  // would show an impossible "Checked 15/9"). Default-pass: untouched item = Pass.
+  const tally: Record<ChecklistStatus, number> = { pass: 0, minor: 0, major: 0, na: 0 }
+  for (const item of items) tally[effectiveStatus(state[item.id])] += 1
   const completed = tally.pass + tally.minor + tally.major + tally.na
   return (
     <div className="mb-5 flex items-stretch gap-3">
@@ -271,10 +277,13 @@ function splitItems(report: InspectionReport, section: SectionDef) {
   const passes: string[] = []
   for (const item of section.items) {
     const st = state[item.id]
-    const status = itemStatus(st)
-    if (!status) continue
-    if (isIssue(status)) issues.push({ title: item.title, state: st })
-    else if ((st?.photos?.length ?? 0) > 0) passEvidence.push({ title: item.title, state: st })
+    // Default-pass: an untouched item counts as a Pass (effectiveStatus), so it
+    // still renders instead of being dropped — this keeps a legacy/unseeded report
+    // coherent (no "92/92 passed" up top while every section page says "not
+    // assessed"). Issue/evidence branches only fire when `st` is present.
+    const status = effectiveStatus(st)
+    if (st && isIssue(status)) issues.push({ title: item.title, state: st })
+    else if (st && (st.photos?.length ?? 0) > 0) passEvidence.push({ title: item.title, state: st })
     else passes.push(item.title)
   }
   return { issues, passEvidence, passes, graded: issues.length + passEvidence.length + passes.length }
@@ -831,11 +840,13 @@ export function ReportExteriorPage({ report, index }: { report: InspectionReport
   const paintMap: PaintMap = {}
   const paintRows: { label: string; condition: PaintCondition }[] = []
   for (const panel of PAINT_PANELS) {
-    const c = paintState[panel.id]?.paint
-    if (c) {
-      paintMap[panel.id] = c
-      paintRows.push({ label: panel.label, condition: c })
-    }
+    // Default-pass: an untouched panel is Original (matches computeCounts and the
+    // exec-summary count), so a legacy/unseeded report shows "Panels 13/13" rather
+    // than "0/13" sitting next to a "92/92 completed" summary. Seeded reports
+    // already store all 13 as original, so this is a no-op for them.
+    const c = paintState[panel.id]?.paint ?? 'original'
+    paintMap[panel.id] = c
+    paintRows.push({ label: panel.label, condition: c })
   }
 
   const { issues, passEvidence, passes } = splitItems(report, section)
@@ -855,11 +866,23 @@ export function ReportExteriorPage({ report, index }: { report: InspectionReport
     sectionScore(checklist['exterior'] || {}, 'exterior') - paintDeductionsFor(checklist[PAINT_SECTION_ID]),
   )
 
+  // Paginate the exterior issue blocks so a heavily-damaged car (now up to 4
+  // detailed cards on every package + pass rows) can't overflow the single
+  // fixed-height sheet and clip content. Page 1 keeps the score row, paint map and
+  // paint list with the blocks that fit beside them; overflow flows onto full-width
+  // "(continued)" pages like every other scored section. leadMm is deliberately
+  // generous — it reserves the full-width paint map AND the narrower col-span-3
+  // issue column — so blocks never clip (at worst an extra, lightly-filled page).
+  const exteriorBlocks = buildSectionBlocks({ issues, passEvidence, passes })
+  const [firstChunk = [], ...contChunks] = paginateSectionBlocks(exteriorBlocks, { leadMm: 110 })
+  const firstCol = splitChunk(firstChunk)
+
   return (
+    <>
     <DocPage>
       <DocHeader label="Exterior & Paint" />
       <div className="flex-1 px-12 pt-9 pb-14">
-        <DocSectionTitle index={index}>Exterior, Paint &amp; Panel Alignment</DocSectionTitle>
+        <DocSectionTitle index={index}>{section.title}</DocSectionTitle>
 
         <div className="mb-5 flex items-stretch gap-3">
           <div
@@ -911,32 +934,43 @@ export function ReportExteriorPage({ report, index }: { report: InspectionReport
 
           <div className="col-span-3">
             <MiniHeading>Exterior Issues</MiniHeading>
-            {issues.length > 0 ? (
+            {firstCol.issues.length > 0 ? (
               <div className="space-y-3">
-                {issues.map((it, i) => (
+                {firstCol.issues.map((it, i) => (
                   <IssueCard key={i} title={it.title} state={it.state} />
                 ))}
               </div>
             ) : (
               <p className="rounded-xl border border-doc-border px-3.5 py-2.5 text-[11px] text-doc-muted">
-                No scratches, dents or panel-alignment issues recorded.
+                No scratches, dents, panel-alignment or chassis issues recorded.
               </p>
             )}
-            {passEvidence.length > 0 && (
+            {firstCol.evidence.length > 0 && (
               <div className="mt-3 space-y-3">
-                {passEvidence.map((it, i) => (
+                {firstCol.evidence.map((it, i) => (
                   <PassEvidenceCard key={`pe-${i}`} title={it.title} state={it.state} />
                 ))}
               </div>
             )}
             <div className="mt-3">
-              <PassList titles={passes} />
+              <PassList titles={firstCol.passes} />
             </div>
           </div>
         </div>
       </div>
       <DocFooter reference={report.report_reference} note="Exterior & paint" />
     </DocPage>
+    {contChunks.map((chunk, ci) => (
+      <DocPage key={ci}>
+        <DocHeader label="Exterior & Paint" />
+        <div className="flex flex-1 flex-col px-12 pt-9 pb-14">
+          <DocSectionTitle>{section.title} (continued)</DocSectionTitle>
+          <SectionChunkBody chunk={chunk} />
+        </div>
+        <DocFooter reference={report.report_reference} note="Exterior & paint" />
+      </DocPage>
+    ))}
+    </>
   )
 }
 
@@ -1086,7 +1120,14 @@ function CornerTyreCard({ label, tyre, rim }: { label: string; tyre?: ChecklistI
         )}
       </div>
       {comment && <p className="mt-1.5 text-[11px] leading-snug text-doc-ink">{comment}</p>}
-      <ItemPhotos photos={[...(tyre?.photos ?? []), ...(rim?.photos ?? [])]} alt={label} />
+      {/* Merge the corner's tyre + rim photos, de-duped by id so a single uploaded
+          wheel photo can never render twice (brief item 6 — the Lexus LS250 glitch). */}
+      <ItemPhotos
+        photos={[...(tyre?.photos ?? []), ...(rim?.photos ?? [])].filter(
+          (p, i, arr) => arr.findIndex((q) => q.id === p.id) === i,
+        )}
+        alt={label}
+      />
     </div>
   )
 }
@@ -1210,7 +1251,7 @@ export function ReportPhotoGalleryPage({
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// Final Recommendation & Inspector Notes
+// Final Recommendation & Inspector Summary
 // ════════════════════════════════════════════════════════════════════════
 export function ReportFinalNotesPage({
   report,
@@ -1227,7 +1268,7 @@ export function ReportFinalNotesPage({
   const showRec = template.recommendationEnabled && Boolean(rec)
 
   const notes: { title: string; body: string }[] = []
-  if (report.inspector_summary?.trim()) notes.push({ title: 'Inspector notes', body: report.inspector_summary })
+  if (report.inspector_summary?.trim()) notes.push({ title: 'Inspector Summary', body: report.inspector_summary })
   if (report.price_negotiation_notes?.trim() && template.negotiationNotesEnabled)
     notes.push({ title: 'Price negotiation notes', body: report.price_negotiation_notes })
 
@@ -1270,7 +1311,7 @@ export function ReportFinalNotesPage({
       <DocHeader label="Recommendation" />
       <div className="flex flex-1 flex-col px-12 pt-9 pb-14">
         <DocSectionTitle index={pi === 0 ? index : undefined}>
-          Final Recommendation &amp; Inspector Notes{pi > 0 ? ' (continued)' : ''}
+          Final Recommendation &amp; Inspector Summary{pi > 0 ? ' (continued)' : ''}
         </DocSectionTitle>
 
         {pi === 0 && recBox}

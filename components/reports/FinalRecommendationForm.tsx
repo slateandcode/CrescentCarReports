@@ -4,6 +4,7 @@ import { Sparkles } from 'lucide-react'
 import type { BuyerRecommendation } from '@/lib/report-types'
 import { RECOMMENDATION_LABEL } from '@/lib/report-utils'
 import { PolishButton } from './PolishButton'
+import { GenerateSummaryButton } from './GenerateSummaryButton'
 import { cn } from '@/lib/utils'
 
 const RECOMMENDATION_OPTIONS: { value: BuyerRecommendation; active: string }[] = [
@@ -19,12 +20,17 @@ interface Patch {
 }
 
 export function FinalRecommendationForm({
+  reportId,
+  onFlush,
   values,
   flags,
   score,
   suggested,
   onPatch,
 }: {
+  reportId: string
+  /** Persist any pending editor edits before the AI summary reads server-side data. */
+  onFlush?: () => Promise<void>
   values: {
     buyer_recommendation: string | null
     inspector_summary: string | null
@@ -81,19 +87,29 @@ export function FinalRecommendationForm({
       )}
 
       <div>
-        <div className="flex items-center justify-between gap-2">
-          <p className="label-base !mb-0">Inspector notes</p>
-          <PolishButton
-            text={values.inspector_summary ?? ''}
-            onPolished={(text) => onPatch({ inspector_summary: text })}
-          />
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="label-base !mb-0">Inspector Summary</p>
+          <div className="flex flex-wrap items-center gap-3">
+            <GenerateSummaryButton
+              reportId={reportId}
+              onFlush={onFlush}
+              onGenerated={(text) => onPatch({ inspector_summary: text })}
+            />
+            <PolishButton
+              text={values.inspector_summary ?? ''}
+              onPolished={(text) => onPatch({ inspector_summary: text })}
+            />
+          </div>
         </div>
         <textarea
           value={values.inspector_summary ?? ''}
           onChange={(e) => onPatch({ inspector_summary: e.target.value })}
-          placeholder="Overall comment for the buyer — anything that doesn't fit the tick-boxes…"
+          placeholder="Overall summary for the buyer — generate with AI, then review and edit…"
           className="input-base mt-1.5 min-h-[120px] resize-y"
         />
+        <p className="mt-1 text-xs text-text-muted">
+          AI drafts from the inspection data — always review and edit before completing.
+        </p>
       </div>
 
       {flags.negotiationNotesEnabled && (

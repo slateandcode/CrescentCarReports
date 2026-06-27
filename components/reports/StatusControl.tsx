@@ -22,7 +22,8 @@ export function StatusSegmentedControl({
   return (
     <div className="grid grid-cols-3 gap-1.5">
       {STATUS_OPTIONS.map((status) => {
-        const active = value === status
+        // Default-pass (brief item 4): an untouched item shows Pass pre-selected.
+        const active = (value ?? 'pass') === status
         return (
           <button
             key={status}

@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 import { IS_DEMO } from '@/lib/env'
 import { getSessionUser } from '@/lib/auth'
 import { generatePublicId } from '@/lib/utils'
-import { computeCounts, mergeFindings } from '@/lib/report-utils'
+import { computeCounts, mergeFindings, seedDefaultChecklist } from '@/lib/report-utils'
 import { validateForCompletion } from '@/lib/report-validation'
 import type {
   ChecklistData,
@@ -39,6 +39,10 @@ export async function createReport(packageType: PackageType): Promise<void> {
   const { data: reference, error: refErr } = await supabase.rpc('next_report_reference')
   if (refErr || !reference) throw new Error('Could not allocate a report reference.')
 
+  // Default-pass (brief item 4): seed every check as Pass / every panel Original
+  // so the inspector only changes what fails. completed === total from the start.
+  const checklist = seedDefaultChecklist(packageType)
+
   const { data, error } = await supabase
     .from('inspection_reports')
     .insert({
@@ -49,10 +53,10 @@ export async function createReport(packageType: PackageType): Promise<void> {
       package_type: packageType,
       vehicle_make: '',
       vehicle_model: '',
-      checklist: {},
+      checklist,
       critical_findings: [],
       photos: [],
-      counts: computeCounts(packageType, {}),
+      counts: computeCounts(packageType, checklist),
     })
     .select('id')
     .single()

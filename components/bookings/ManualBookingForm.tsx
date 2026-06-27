@@ -59,7 +59,7 @@ const EMPTY: FormState = {
   plate_number: '',
   inspection_date: '',
   slot_time: '',
-  package_id: 'comprehensive',
+  package_id: 'standard',
   total_price: '',
   payment_status: 'manual',
   assigned_inspector: '',
@@ -81,7 +81,9 @@ export function ManualBookingForm({
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
 
-  const pkg = PACKAGE_LIST.find((p) => p.id === form.package_id) ?? PACKAGE_LIST[1]
+  // Fall back to the cheapest sold tier (Standard) for any unknown/retired id, so a
+  // stray value can never silently price a booking at the most expensive package.
+  const pkg = PACKAGE_LIST.find((p) => p.id === form.package_id) ?? PACKAGE_LIST[0]
   const longDistance = isLongDistance(form.emirate)
   const travel = longDistance ? TRAVEL_FEE_AED : 0
   const suggested = pkg.price + travel

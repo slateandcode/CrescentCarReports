@@ -292,9 +292,39 @@ export function ReportEditor({
         const section = prev.checklist[sectionId] || {}
         const current = section[itemId] || {}
         const value = typeof next === 'function' ? next(current) : next
+        let nextSection = { ...section, [itemId]: value }
+
+        // Tyre spec auto-copy (brief item 7): when the FIRST tyre's manufacturer /
+        // DOT / tread changes, mirror that change to the other corners — but only
+        // the field(s) that actually changed, and only to a corner still IN SYNC
+        // with the first tyre's PREVIOUS value. A corner the inspector typed
+        // differently OR deliberately cleared has diverged, so it's left untouched
+        // (this is what keeps a blanked corner from being silently re-filled).
+        const TYRE_SPEC_FIELDS = ['tyreManufacturer', 'tyreDate', 'tread'] as const
+        const specsChanged =
+          sectionId === 'tyres-brakes' &&
+          itemId === 'tyre-fl' &&
+          TYRE_SPEC_FIELDS.some((f) => (current[f] ?? '') !== (value[f] ?? ''))
+        if (specsChanged) {
+          for (const target of ['tyre-fr', 'tyre-rl', 'tyre-rr']) {
+            const cur = nextSection[target] || {}
+            let patch = cur
+            for (const f of TYRE_SPEC_FIELDS) {
+              // Skip fields the inspector didn't just change on the first tyre.
+              if ((current[f] ?? '') === (value[f] ?? '')) continue
+              const targetVal = (cur[f] ?? '').trim()
+              const prevFirst = (current[f] ?? '').trim()
+              if (targetVal === prevFirst) {
+                patch = { ...patch, [f]: value[f] ?? '' }
+              }
+            }
+            if (patch !== cur) nextSection = { ...nextSection, [target]: patch }
+          }
+        }
+
         return {
           ...prev,
-          checklist: { ...prev.checklist, [sectionId]: { ...section, [itemId]: value } },
+          checklist: { ...prev.checklist, [sectionId]: nextSection },
         }
       })
     },
@@ -620,14 +650,16 @@ export function ReportEditor({
           />
         </SectionAccordion>
 
-        {/* 5. Final Recommendation & Inspector Notes */}
+        {/* 5. Final Recommendation & Inspector Summary */}
         <SectionAccordion
-          title="Final Recommendation & Inspector Notes"
-          subtitle={template.recommendationEnabled ? 'Recommendation and notes' : 'Inspector notes'}
+          title="Final Recommendation & Inspector Summary"
+          subtitle={template.recommendationEnabled ? 'Recommendation and summary' : 'Inspector summary'}
           icon={<ClipboardList size={18} />}
           defaultOpen
         >
           <FinalRecommendationForm
+            reportId={report.id}
+            onFlush={flush}
             values={{
               buyer_recommendation: form.buyer_recommendation,
               inspector_summary: form.inspector_summary,

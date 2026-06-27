@@ -1,0 +1,31 @@
+-- ════════════════════════════════════════════════════════════════════════
+-- 018 — Revoke anon EXECUTE on the internal report-sequence / delete RPCs
+--
+-- SECURITY HARDENING (low severity). Supabase auto-grants EXECUTE on every
+-- public-schema function to `anon` AND `authenticated`. Both functions below are
+-- SECURITY DEFINER, so an anon caller hitting POST /rest/v1/rpc/<fn> runs them as
+-- the owner, bypassing RLS:
+--
+--   • next_report_reference()       — increments report_counters.last_seq and
+--     returns the next CCR-YYYY-#### reference. An anonymous flood could inflate
+--     the counter and open gaps in the report sequence. Legitimately called ONLY
+--     by an authenticated inspector creating a report (app/(app)/reports/actions.ts
+--     and app/(app)/bookings/actions.ts, via the cookie-bound client) — never anon.
+--   • delete_report_renumber(uuid)  — already self-guards with is_admin() and
+--     raises if the caller isn't an admin, so it is not exploitable, but anon has
+--     no business being able to reach it at all.
+--
+-- Revoke EXECUTE from `anon` ONLY. `authenticated` KEEPS execute on purpose:
+-- report creation and admin deletes run through the cookie-bound `authenticated`
+-- client (lib/supabase/server.ts → createClient(), RLS-enforced), and
+-- delete_report_renumber's internal is_admin() check still gates non-admins.
+-- The booking RPCs were already anon/authenticated-revoked in migration 006;
+-- this closes the two report RPCs that 001/010 left on Supabase's default grant.
+-- Clears the Supabase security-advisor "anon can execute SECURITY DEFINER
+-- function" warning for these two.
+--
+-- Idempotent: REVOKE is a no-op when the grant is already absent. Safe to re-run.
+-- ════════════════════════════════════════════════════════════════════════
+
+revoke execute on function public.next_report_reference()      from anon;
+revoke execute on function public.delete_report_renumber(uuid)  from anon;

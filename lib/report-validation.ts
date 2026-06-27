@@ -102,7 +102,7 @@ export function validateForCompletion(report: InspectionReport): ValidationResul
 
   if (pkg.recommendationEnabled) {
     if (!report.buyer_recommendation) errors.push('Buyer recommendation is required for this package.')
-    if (!report.inspector_summary?.trim()) errors.push('Inspector notes are required for this package.')
+    if (!report.inspector_summary?.trim()) errors.push('An Inspector Summary is required for this package.')
   }
 
   return { ok: errors.length === 0, errors }

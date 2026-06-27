@@ -15,7 +15,7 @@ import type {
   ReportStatus,
 } from './report-types'
 import { getScoredSections, getSection, getTemplate, templateItemCount } from './report-templates'
-import { PAINT_SECTION_ID, PAINT_PANELS } from './issues'
+import { PAINT_SECTION_ID, PAINT_PANELS, generateAccidentComment } from './issues'
 
 // ─── Status normalisation (legacy → canonical) ─────────────────────────────
 
@@ -30,6 +30,18 @@ export function normalizeStatus(status?: AnyChecklistStatus | null): ChecklistSt
 /** Canonical status for a stored item state (handles legacy values). */
 export function itemStatus(state?: ChecklistItemState | null): ChecklistStatus | undefined {
   return normalizeStatus(state?.status)
+}
+
+/**
+ * Status for display & counting under the brief's DEFAULT-PASS model (item 4): an
+ * item the inspector hasn't touched reads as Pass — they only change what fails.
+ * New reports are also seeded with explicit Pass at creation (seedDefaultChecklist),
+ * so this mainly keeps legacy reports and any later-added template items consistent
+ * without a data migration. Scoring deductions already treat unset as Pass (0
+ * deduction), so this does not change any existing report's score.
+ */
+export function effectiveStatus(state?: ChecklistItemState | null): ChecklistStatus {
+  return itemStatus(state) ?? 'pass'
 }
 
 /** True when a status is a Minor or Major issue (needs evidence). */
@@ -165,7 +177,13 @@ export function assessedPaintPanels(checklist: ChecklistData): number {
 
 // ─── Counts & completion ──────────────────────────────────────────────────
 
-/** Tally pass/minor/major/na + completion across the SCORED template items. */
+/**
+ * Tally pass/minor/major/na + completion across the SCORED template items.
+ *
+ * Default-pass (brief item 4/8): an untouched item counts as Pass and an
+ * untouched paint panel as Original, so `completed` always equals `total` for a
+ * fresh report (no more "99/101"). The inspector only changes what fails.
+ */
 export function computeCounts(pkg: PackageType, checklist: ChecklistData): ReportCounts {
   // Total possible points = scored checklist items + the 13 exterior paint panels.
   const counts: ReportCounts = {
@@ -178,28 +196,47 @@ export function computeCounts(pkg: PackageType, checklist: ChecklistData): Repor
   }
 
   for (const section of getScoredSections(pkg)) {
-    const sectionState = checklist[section.id]
-    if (!sectionState) continue
+    const sectionState = checklist[section.id] ?? {}
     for (const item of section.items) {
-      const status = itemStatus(sectionState[item.id])
-      if (status) {
-        counts[status] += 1
-        counts.completed += 1
-      }
+      const status = effectiveStatus(sectionState[item.id]) // unset → 'pass'
+      counts[status] += 1
+      counts.completed += 1
     }
   }
 
-  // Paint panels are checked points too: original → pass, anything else → minor.
-  const paintState = checklist[PAINT_SECTION_ID]
-  if (paintState) {
-    for (const v of Object.values(paintState)) {
-      if (!v?.paint) continue
-      counts.completed += 1
-      if (v.paint === 'original') counts.pass += 1
-      else counts.minor += 1
-    }
+  // Paint panels are checked points too: original (the default) → pass, else minor.
+  const paintState = checklist[PAINT_SECTION_ID] ?? {}
+  for (const panel of PAINT_PANELS) {
+    const paint = paintState[panel.id]?.paint ?? 'original'
+    counts.completed += 1
+    if (paint === 'original') counts.pass += 1
+    else counts.minor += 1
   }
   return counts
+}
+
+/**
+ * Build a fresh checklist with every scored item pre-marked Pass and every
+ * exterior paint panel set to Original (brief item 4). Seeded into new reports at
+ * creation so the inspector only flips the items that fail. Endoscopic evidence
+ * (unscored, Premium-only) is left empty.
+ */
+export function seedDefaultChecklist(pkg: PackageType): ChecklistData {
+  const checklist: ChecklistData = {}
+  for (const section of getScoredSections(pkg)) {
+    const sectionState: Record<string, ChecklistItemState> = {}
+    for (const item of section.items) {
+      sectionState[item.id] =
+        section.kind === 'accident'
+          ? { status: 'pass', comment: generateAccidentComment(null) }
+          : { status: 'pass' }
+    }
+    checklist[section.id] = sectionState
+  }
+  const paint: Record<string, ChecklistItemState> = {}
+  for (const panel of PAINT_PANELS) paint[panel.id] = { paint: 'original' }
+  checklist[PAINT_SECTION_ID] = paint
+  return checklist
 }
 
 /** Completion percentage (0–100) based on items with a status set. */
@@ -274,12 +311,13 @@ export function sectionScores(pkg: PackageType, checklist: ChecklistData): Secti
     const sectionState = checklist[section.id] || {}
     let graded = 0
     for (const item of section.items) {
-      // Only pass/minor/major count as graded — an 'na' item deducts nothing, so
-      // counting it would let an all-N/A section read as a free 100. Excluding it
-      // keeps such a section at graded === 0 so it drops out of the weighted
-      // overallScore below instead of skewing it to a perfect 100/100.
-      const status = itemStatus(sectionState[item.id])
-      if (status && status !== 'na') graded += 1
+      // Default-pass: an untouched item counts as a graded Pass (effectiveStatus),
+      // mirroring computeCounts/sectionCounts — so a legacy/unseeded report scores
+      // coherently instead of reading "Not graded". Only an EXPLICIT 'na' is
+      // excluded (it deducts nothing; counting it would let an all-N/A section read
+      // as a free 100), keeping such a section out of the weighted overallScore.
+      const status = effectiveStatus(sectionState[item.id])
+      if (status !== 'na') graded += 1
     }
     let score = sectionScore(sectionState, section.id)
     // Exterior also carries the paint-panel deductions, and the panels count as
@@ -390,17 +428,24 @@ export const STATUS_BADGE_LABEL: Record<ReportStatus, string> = {
   archived: 'Archived',
 }
 
-/** Section-level status tally for the preview pages / editor headers. */
+/** Section-level status tally for the preview pages / editor headers.
+ *  Default-pass: every current template item is counted, untouched ones as Pass
+ *  (looking up by current item id inherently ignores orphaned legacy keys). */
 export function sectionCounts(
   checklist: ChecklistData,
   sectionId: string,
 ): Record<ChecklistStatus, number> {
   const tally: Record<ChecklistStatus, number> = { pass: 0, minor: 0, major: 0, na: 0 }
-  const sectionState = checklist[sectionId]
-  if (!sectionState) return tally
-  for (const state of liveSectionStates(sectionId, sectionState)) {
-    const status = itemStatus(state)
-    if (status) tally[status] += 1
+  const sectionState = checklist[sectionId] ?? {}
+  const def = getSection(sectionId)
+  if (def) {
+    for (const item of def.items) tally[effectiveStatus(sectionState[item.id])] += 1
+  } else {
+    // Non-library section (e.g. the paint map): tally only stored statuses.
+    for (const state of Object.values(sectionState)) {
+      const status = itemStatus(state)
+      if (status) tally[status] += 1
+    }
   }
   return tally
 }

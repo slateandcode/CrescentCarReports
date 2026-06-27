@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef } from 'react'
+import { memo, useCallback, useRef } from 'react'
 import { AlertTriangle, Camera, Wand2 } from 'lucide-react'
 import type { ChecklistItemDef } from '@/lib/report-templates'
 import type { ChecklistItemState, ChecklistStatus, PhotoRef } from '@/lib/report-types'
@@ -16,7 +16,14 @@ interface Props {
   sectionId: string
   item: ChecklistItemDef
   state: ChecklistItemState
-  onChange: (next: ChecklistItemState | ((prev: ChecklistItemState) => ChecklistItemState)) => void
+  // A single STABLE callback shared by every card (keyed on section+item) so the
+  // card can be memoized — a keystroke in one item no longer re-renders the other
+  // 200-300 cards (brief item 11).
+  onItemChange: (
+    sectionId: string,
+    itemId: string,
+    next: ChecklistItemState | ((prev: ChecklistItemState) => ChecklistItemState),
+  ) => void
   /** Common-fault tick-boxes for this section. */
   commonIssues?: string[]
   /** Per-corner tyre: manufacturer / date / tread + photos are mandatory. */
@@ -25,16 +32,23 @@ interface Props {
   accident?: boolean
 }
 
-export function ChecklistItemCard({
+function ChecklistItemCardImpl({
   reportId,
   sectionId,
   item,
   state,
-  onChange,
+  onItemChange,
   commonIssues = [],
   tyre = false,
   accident = false,
 }: Props) {
+  // Rebuild the per-item onChange from the stable parent callback. Stable across
+  // renders (its deps are all stable), so memo() below can skip untouched cards.
+  const onChange = useCallback(
+    (next: ChecklistItemState | ((prev: ChecklistItemState) => ChecklistItemState)) =>
+      onItemChange(sectionId, item.id, next),
+    [onItemChange, sectionId, item.id],
+  )
   const status = itemStatus(state)
   const showIssue = isIssue(status)
   const photos = state.photos ?? []
@@ -399,3 +413,11 @@ export function ChecklistItemCard({
     </div>
   )
 }
+
+/**
+ * Memoized so a change to one item re-renders only that card. With a stable
+ * `onItemChange` and a stable `state` reference for untouched items, React skips
+ * the hundreds of sibling cards that previously re-rendered on every keystroke
+ * (brief item 11 — live-inspection responsiveness).
+ */
+export const ChecklistItemCard = memo(ChecklistItemCardImpl)

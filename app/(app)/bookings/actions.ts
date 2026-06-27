@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 import { IS_DEMO } from '@/lib/env'
 import { getSessionUser } from '@/lib/auth'
 import { generatePublicId } from '@/lib/utils'
-import { computeCounts } from '@/lib/report-utils'
+import { computeCounts, seedDefaultChecklist } from '@/lib/report-utils'
 import { PACKAGES } from '@/lib/report-templates'
 import { EMIRATES } from '@/lib/options'
 import {
@@ -339,6 +339,12 @@ export async function createReportFromBooking(bookingId: string): Promise<Bookin
 
     const b = booking as Booking
     const pkg = b.package_id
+    // Default-pass (brief item 4): seed every check Pass / every panel Original so
+    // the inspector only changes what fails — mirrors createReport in
+    // reports/actions.ts. Without this, a booking-originated report would render
+    // "passed" counts on the exec summary but "not assessed" on every section page,
+    // because the PDF section pages read the raw stored item status.
+    const checklist = seedDefaultChecklist(pkg)
     const { data: report, error } = await supabase
       .from('inspection_reports')
       .insert({
@@ -362,10 +368,10 @@ export async function createReportFromBooking(bookingId: string): Promise<Bookin
         // built from SLOT_TIMES values, so the key round-trips; the label would
         // fall through to the "legacy / off-slot" option instead of matching.
         inspection_time: b.slot_time,
-        checklist: {},
+        checklist,
         critical_findings: [],
         photos: [],
-        counts: computeCounts(pkg, {}),
+        counts: computeCounts(pkg, checklist),
       })
       .select('id')
       .single()

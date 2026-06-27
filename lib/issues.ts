@@ -119,6 +119,38 @@ export function commonIssuesForSection(sectionId: string): string[] {
  * not listed as a chip here.
  */
 export const COMMON_ISSUES_BY_ITEM: Record<string, string[]> = {
+  'chassis-condition': [
+    'Chassis corrosion / rust',
+    'Chassis impact / deformation',
+    'Previous structural repair',
+    'Welding / cut-and-weld signs',
+    'Chassis rail damage',
+    'Underbody member damage',
+  ],
+  'test-drive': [
+    'Pulls to one side',
+    'Vibration at speed',
+    'Abnormal noise on drive',
+    'Hesitation / lack of power',
+    'Rough / delayed gear changes',
+    'Braking feels uneven',
+    'Warning light during drive',
+  ],
+  'brake-disc-wear': [
+    'Disc wear beyond limit',
+    'Scoring / grooves on disc',
+    'Lipping at disc edge',
+    'Warped disc (pulsation)',
+    'Corrosion / pitting',
+    'Replacement recommended',
+  ],
+  'odometer-tampering': [
+    'Mileage inconsistent with condition',
+    'Reading conflicts with service history',
+    'Conflicting digital odometer data',
+    'Signs of cluster tampering',
+    'Unable to verify mileage',
+  ],
   'engine-endoscopic': [
     'Oil residue observed',
     'Carbon build-up observed',

@@ -6,7 +6,7 @@ import type {
   ChecklistItemState,
 } from './report-types'
 import type { SessionUser } from './auth'
-import { computeCounts, mergeFindings } from './report-utils'
+import { computeCounts, mergeFindings, seedDefaultChecklist } from './report-utils'
 import { getTemplate } from './report-templates'
 import { PAINT_SECTION_ID } from './issues'
 import { generatePublicId } from './utils'
@@ -449,8 +449,11 @@ export function demoGetReport(id: string): InspectionReport | null {
 }
 
 export function demoCreateReport(pkg: PackageType): InspectionReport {
+  // Default-pass (brief item 4): seed every check Pass / panel Original.
+  const checklist = seedDefaultChecklist(pkg)
   const r = base(pkg, nextRef())
-  r.counts = computeCounts(pkg, {})
+  r.checklist = checklist
+  r.counts = computeCounts(pkg, checklist)
   store().set(r.id, r)
   return r
 }
