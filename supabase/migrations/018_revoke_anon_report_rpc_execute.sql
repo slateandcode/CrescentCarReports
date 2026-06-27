@@ -1,10 +1,11 @@
 -- ════════════════════════════════════════════════════════════════════════
 -- 018 — Revoke anon EXECUTE on the internal report-sequence / delete RPCs
 --
--- SECURITY HARDENING (low severity). Supabase auto-grants EXECUTE on every
--- public-schema function to `anon` AND `authenticated`. Both functions below are
--- SECURITY DEFINER, so an anon caller hitting POST /rest/v1/rpc/<fn> runs them as
--- the owner, bypassing RLS:
+-- SECURITY HARDENING (low severity). A function created in the public schema is
+-- granted EXECUTE to the PUBLIC pseudo-role by default, so `anon` (and every
+-- role) can call it via PUBLIC even with no direct grant of its own. Both
+-- functions below are SECURITY DEFINER, so an anon caller hitting
+-- POST /rest/v1/rpc/<fn> runs them as the owner, bypassing RLS:
 --
 --   • next_report_reference()       — increments report_counters.last_seq and
 --     returns the next CCR-YYYY-#### reference. An anonymous flood could inflate
@@ -15,17 +16,23 @@
 --     raises if the caller isn't an admin, so it is not exploitable, but anon has
 --     no business being able to reach it at all.
 --
--- Revoke EXECUTE from `anon` ONLY. `authenticated` KEEPS execute on purpose:
--- report creation and admin deletes run through the cookie-bound `authenticated`
--- client (lib/supabase/server.ts → createClient(), RLS-enforced), and
--- delete_report_renumber's internal is_admin() check still gates non-admins.
--- The booking RPCs were already anon/authenticated-revoked in migration 006;
--- this closes the two report RPCs that 001/010 left on Supabase's default grant.
--- Clears the Supabase security-advisor "anon can execute SECURITY DEFINER
+-- IMPORTANT: anon's access comes from the PUBLIC grant, NOT a direct grant — so
+-- `revoke ... from anon` alone is a no-op (verified against the live DB: anon
+-- still had EXECUTE afterwards because PUBLIC still held it). We must revoke from
+-- PUBLIC, then re-grant to the legitimate callers so they keep access:
+--   - authenticated: report creation + admin deletes run through the cookie-bound
+--     `authenticated` client (RLS-enforced; delete_report_renumber's is_admin()
+--     still gates non-admins).
+--   - service_role: kept for server-side use.
+-- This mirrors the from-public revoke pattern migration 006 used for the booking
+-- RPCs. Clears the Supabase security-advisor "anon can execute SECURITY DEFINER
 -- function" warning for these two.
 --
--- Idempotent: REVOKE is a no-op when the grant is already absent. Safe to re-run.
+-- Idempotent: REVOKE/GRANT are no-ops when already in the target state. Safe to re-run.
 -- ════════════════════════════════════════════════════════════════════════
 
-revoke execute on function public.next_report_reference()      from anon;
-revoke execute on function public.delete_report_renumber(uuid)  from anon;
+revoke execute on function public.next_report_reference()       from public, anon;
+revoke execute on function public.delete_report_renumber(uuid)  from public, anon;
+
+grant  execute on function public.next_report_reference()       to authenticated, service_role;
+grant  execute on function public.delete_report_renumber(uuid)  to authenticated, service_role;
