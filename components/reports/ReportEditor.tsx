@@ -70,31 +70,42 @@ export function ReportEditor({
 }) {
   const template = useMemo(() => getTemplate(report.package_type), [report.package_type])
 
-  const [form, setForm] = useState<Form>(() => ({
-    customer_name: report.customer_name,
-    customer_phone: report.customer_phone,
-    customer_email: report.customer_email,
-    vehicle_make: report.vehicle_make,
-    vehicle_model: report.vehicle_model,
-    vehicle_year: report.vehicle_year,
-    vin: report.vin,
-    plate_number: report.plate_number,
-    odometer: report.odometer,
-    regional_specs: report.regional_specs,
-    transmission: report.transmission,
-    fuel_type: report.fuel_type,
-    engine_size: report.engine_size,
-    exterior_colour: report.exterior_colour,
-    inspection_location: report.inspection_location,
-    inspection_date: report.inspection_date,
-    inspection_time: report.inspection_time,
-    main_vehicle_image_url: report.main_vehicle_image_url,
-    buyer_recommendation: normalizeRecommendation(report.buyer_recommendation) ?? null,
-    inspector_summary: report.inspector_summary,
-    price_negotiation_notes: report.price_negotiation_notes,
-    checklist: report.checklist || {},
-    photos: report.photos || [],
-  }))
+  // The pristine server-loaded form. A stable reference (memoised on the report)
+  // so the local-draft recovery effect can tell whether a stored draft actually
+  // differs from what the server returned.
+  const initialForm = useMemo<Form>(
+    () => ({
+      customer_name: report.customer_name,
+      customer_phone: report.customer_phone,
+      customer_email: report.customer_email,
+      vehicle_make: report.vehicle_make,
+      vehicle_model: report.vehicle_model,
+      vehicle_year: report.vehicle_year,
+      vin: report.vin,
+      plate_number: report.plate_number,
+      odometer: report.odometer,
+      regional_specs: report.regional_specs,
+      transmission: report.transmission,
+      fuel_type: report.fuel_type,
+      engine_size: report.engine_size,
+      exterior_colour: report.exterior_colour,
+      inspection_location: report.inspection_location,
+      inspection_date: report.inspection_date,
+      inspection_time: report.inspection_time,
+      main_vehicle_image_url: report.main_vehicle_image_url,
+      buyer_recommendation: normalizeRecommendation(report.buyer_recommendation) ?? null,
+      inspector_summary: report.inspector_summary,
+      price_negotiation_notes: report.price_negotiation_notes,
+      checklist: report.checklist || {},
+      photos: report.photos || [],
+    }),
+    [report],
+  )
+  const [form, setForm] = useState<Form>(initialForm)
+  // Per-report key for the local-storage draft backup. This is the safety net
+  // that survives what a network save can't — reloads, crashes, force-close, and
+  // long no-signal stretches in the field.
+  const DRAFT_KEY = `ccr-draft:${report.id}`
 
   const [status, setStatus] = useState(report.status)
   const [saveState, setSaveState] = useState<SaveState>('saved')
@@ -105,6 +116,9 @@ export function ReportEditor({
   // autosaving (a reload is required) and show a banner; see doSave + the
   // autosave effect below.
   const [conflict, setConflict] = useState(false)
+  // A local-storage draft found on mount that differs from the server copy —
+  // unsaved work from a previous session on THIS device, offered for restore.
+  const [recoverable, setRecoverable] = useState<Form | null>(null)
 
   const counts = useMemo(
     () => computeCounts(report.package_type, form.checklist),
@@ -174,32 +188,66 @@ export function ReportEditor({
       // Manual findings are no longer authored here — the server re-derives auto
       // findings from Major issues.
       const patch: ReportPatch = { ...f, critical_findings: [] }
-      const result = await saveReport(report.id, patch, baselineUpdatedAt.current)
-      inFlight.current = false
-      setSaving(false)
-      if (result.ok) {
-        // Adopt the new baseline so the next save's precondition matches.
-        if (result.updated_at) baselineUpdatedAt.current = result.updated_at
-        if (editSeq.current === savingSeq.current) {
-          // Nothing changed during the save — it's fully persisted.
-          dirtyRef.current = false
-          setSaveState('saved')
-        } else {
-          // A trailing edit landed mid-flight: keep it dirty and let the
-          // re-armed debounce (or flush) persist it next.
-          setSaveState('unsaved')
-          if (!timer.current && !conflictRef.current) {
-            timer.current = setTimeout(() => void doSaveRef.current?.(), AUTOSAVE_MS)
-          }
+      // Re-arm the debounce so a failed/dropped save retries itself once the
+      // connection recovers, instead of sitting unsaved until the next keystroke.
+      const armRetry = () => {
+        if (!timer.current && !conflictRef.current) {
+          timer.current = setTimeout(() => void doSaveRef.current?.(), AUTOSAVE_MS)
         }
-        return editSeq.current === savingSeq.current
       }
-      if (result.conflict) {
-        conflictRef.current = true
-        setConflict(true)
+      try {
+        const result = await saveReport(report.id, patch, baselineUpdatedAt.current)
+        if (result.ok) {
+          // Adopt the new baseline so the next save's precondition matches.
+          if (result.updated_at) baselineUpdatedAt.current = result.updated_at
+          if (editSeq.current === savingSeq.current) {
+            // Nothing changed during the save — it's fully persisted. Drop the
+            // local backup; its presence on next load is what signals unsaved work.
+            dirtyRef.current = false
+            try {
+              localStorage.removeItem(DRAFT_KEY)
+            } catch {
+              /* storage unavailable — nothing to clean up */
+            }
+            setSaveState('saved')
+          } else {
+            // A trailing edit landed mid-flight: keep it dirty and let the
+            // re-armed debounce (or flush) persist it next.
+            setSaveState('unsaved')
+            armRetry()
+          }
+          return editSeq.current === savingSeq.current
+        }
+        // A precondition mismatch is terminal: someone else saved. Freeze
+        // autosave and ask for a reload rather than retrying over the winner.
+        if (result.conflict) {
+          conflictRef.current = true
+          setConflict(true)
+          setSaveState('error')
+          return false
+        }
+        // Resolved non-conflict error (expired session, DB error): surface it
+        // but keep retrying — the edit stays dirty.
+        setSaveState('error')
+        armRetry()
+        return false
+      } catch {
+        // The save REJECTED — a dropped/aborted request on a flaky mobile
+        // connection, a 5xx, or an RSC transport error. This is NOT a conflict:
+        // keep the edit dirty and auto-retry. The finally below still clears
+        // inFlight/saving, so a single dropped save can no longer wedge autosave
+        // (and the disabled Save button) for the rest of the session — the bug
+        // that silently dropped every edit made after one mobile network blip.
+        setSaveState('error')
+        armRetry()
+        return false
+      } finally {
+        // Runs on EVERY outcome — resolve, resolved-error, or reject — so the
+        // in-flight guard and the saving spinner always reset and the editor can
+        // save again. This is the core data-loss fix.
+        inFlight.current = false
+        setSaving(false)
       }
-      setSaveState('error')
-      return false
     })()
     savePromise.current = run
     try {
@@ -207,7 +255,7 @@ export function ReportEditor({
     } finally {
       if (savePromise.current === run) savePromise.current = null
     }
-  }, [report.id])
+  }, [report.id, DRAFT_KEY])
 
   useEffect(() => {
     doSaveRef.current = doSave
@@ -244,6 +292,16 @@ export function ReportEditor({
       firstRender.current = false
       return
     }
+    // Mirror the latest form to local storage on every change — synchronous and
+    // network-independent, so a reload, crash, force-close or long dead-zone can
+    // recover the work even when no server save has succeeded. Written before the
+    // conflict check so edits made during a conflict are backed up too.
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({ form, at: Date.now() }))
+    } catch {
+      // Storage full/unavailable (e.g. private mode) — best-effort; the server
+      // save remains the primary path.
+    }
     // A detected conflict freezes autosave until the page is reloaded.
     if (conflictRef.current) return
     dirtyRef.current = true
@@ -254,7 +312,7 @@ export function ReportEditor({
     return () => {
       if (timer.current) clearTimeout(timer.current)
     }
-  }, [form, doSave])
+  }, [form, doSave, DRAFT_KEY])
 
   // Warn before leaving with unsaved changes.
   useEffect(() => {
@@ -267,6 +325,62 @@ export function ReportEditor({
     window.addEventListener('beforeunload', onBeforeUnload)
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
   }, [])
+
+  // Flush the latest edit when the tab is backgrounded or closed. beforeunload
+  // (above) is unreliable on mobile and never fires when the OS freezes/discards
+  // a backgrounded tab — the common way an inspector loses the last edit on a
+  // phone. visibilitychange/pagehide ARE delivered on mobile, so save immediately
+  // (bypassing the 1.5s debounce) while we still can.
+  useEffect(() => {
+    function flushOnHide() {
+      if (document.visibilityState === 'hidden' && dirtyRef.current && !conflictRef.current) {
+        void doSaveRef.current?.()
+      }
+    }
+    document.addEventListener('visibilitychange', flushOnHide)
+    window.addEventListener('pagehide', flushOnHide)
+    return () => {
+      document.removeEventListener('visibilitychange', flushOnHide)
+      window.removeEventListener('pagehide', flushOnHide)
+    }
+  }, [])
+
+  // On mount, surface any local-storage draft left by a previous session on this
+  // device (a reload/crash/force-close before the work reached the server). Only
+  // offer it if it actually differs from what the server returned this load.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw) as { form?: Form } | null
+      if (parsed?.form && JSON.stringify(parsed.form) !== JSON.stringify(initialForm)) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time read of a browser-only API (localStorage) on mount
+        setRecoverable(parsed.form)
+      } else {
+        // Identical to the server copy (or junk) — nothing to recover.
+        localStorage.removeItem(DRAFT_KEY)
+      }
+    } catch {
+      // Corrupt/unavailable storage — ignore; the server copy still loads.
+    }
+  }, [DRAFT_KEY, initialForm])
+
+  // Restore the local draft into the editor; the autosave effect then persists it
+  // to the server (and a successful save clears the backup).
+  function restoreDraft() {
+    if (!recoverable) return
+    setForm(recoverable)
+    setRecoverable(null)
+  }
+  // Keep the server copy and drop the local backup.
+  function discardDraft() {
+    try {
+      localStorage.removeItem(DRAFT_KEY)
+    } catch {
+      /* storage unavailable — nothing to drop */
+    }
+    setRecoverable(null)
+  }
 
   // ─── field setters ──────────────────────────────────────────────────────
   function patch(p: Partial<Form>) {
@@ -361,7 +475,15 @@ export function ReportEditor({
         /* fall through to the explicit save */
       }
     }
-    const saved = await doSave()
+    let saved = false
+    try {
+      saved = await doSave()
+    } catch {
+      // doSave no longer rejects on the coalesced path after the in-flight fix,
+      // but guard the explicit save anyway so a throw can never leave the
+      // Complete button stuck spinning with no error shown.
+      saved = false
+    }
     if (!saved) {
       setCompleting(false)
       setCompleteError(
@@ -405,6 +527,26 @@ export function ReportEditor({
         score={score}
         saveState={saveState}
       />
+
+      {/* Unsaved-work recovery: a local backup from a previous session on this
+          device that never reached the server. Offered so a reload/crash can't
+          lose field work. */}
+      {recoverable && (
+        <div className="mt-3 rounded-card border border-accent/40 bg-accent-muted p-3 text-sm">
+          <p className="font-semibold text-text-primary">Unsaved changes found on this device</p>
+          <p className="mt-0.5 text-text-secondary">
+            This report has edits from a previous session that never finished saving. Restore them?
+          </p>
+          <div className="mt-2 flex gap-2">
+            <button type="button" onClick={restoreDraft} className="btn-primary h-9 px-3 text-sm">
+              Restore unsaved changes
+            </button>
+            <button type="button" onClick={discardDraft} className="btn-secondary h-9 px-3 text-sm">
+              Discard
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="mt-4 space-y-3">
         {/* 1. Report Setup */}
