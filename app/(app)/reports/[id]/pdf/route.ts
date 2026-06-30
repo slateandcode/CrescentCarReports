@@ -5,7 +5,12 @@ import { getReportById } from '@/lib/data'
 import { IS_DEMO } from '@/lib/env'
 import { renderUrlToPdf } from '@/lib/pdf'
 import { createPdfToken } from '@/lib/pdf-token'
-import { REPORT_PDF_BUCKET, reportPdfCachePath } from '@/lib/pdf-cache'
+import {
+  REPORT_PDF_BUCKET,
+  reportPdfCachePath,
+  reportPdfFilename,
+  legacyReportPdfCachePath,
+} from '@/lib/pdf-cache'
 
 // Redirect the client to a short-lived signed URL for the cached PDF in Supabase
 // Storage, instead of streaming the bytes back through this function.
@@ -81,8 +86,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     reference = report.report_reference
     updatedAt = report.updated_at
   }
-  const filename = `${reference || 'inspection-report'}.pdf`
-  const cachePath = reportPdfCachePath(id, updatedAt)
+  const filename = reportPdfFilename(reference)
+  // New layout `{id}/{version}/CCR-2026-000.pdf`: the report reference is the
+  // object's leaf, so the iOS inline signed URL ends in a meaningful filename.
+  const cachePath = reportPdfCachePath(id, updatedAt, reference)
+  // Old flat layout `{id}/{version}.pdf` from before 2026-06-30 — still served by
+  // lazily copying it into the new layout (a cheap storage copy, no re-render).
+  const legacyPath = legacyReportPdfCachePath(id, updatedAt)
   // Desktop asks for an attachment (save to disk) via ?download=1; iOS omits it so
   // the PDF opens inline in Safari's viewer. See signedPdfRedirect.
   const asDownload = _req.nextUrl.searchParams.get('download') === '1'
@@ -93,7 +103,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   // function-response ceiling, so a big report can't crash the function.
   try {
     const svc = createServiceClient()
-    const redirect = await signedPdfRedirect(svc, cachePath, filename, asDownload)
+    let redirect = await signedPdfRedirect(svc, cachePath, filename, asDownload)
+    if (redirect) return redirect
+    // Legacy object cached under the old flat name? Migrate it to the new layout
+    // once (server-side copy — no Chromium). Ignore the copy's result: whether it
+    // succeeded, or lost a race to a concurrent request that already created the
+    // new object (a "destination exists" error), the new path may now exist — so
+    // just try to sign it again before falling back to a live render.
+    await svc.storage.from(REPORT_PDF_BUCKET).copy(legacyPath, cachePath)
+    redirect = await signedPdfRedirect(svc, cachePath, filename, asDownload)
     if (redirect) return redirect
   } catch {
     // Cache unavailable/misconfigured — fall through to a live render.

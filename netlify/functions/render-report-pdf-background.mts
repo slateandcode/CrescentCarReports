@@ -13,8 +13,11 @@ import puppeteer from 'puppeteer-core'
 import chromium from '@sparticuz/chromium-min'
 import { createClient } from '@supabase/supabase-js'
 import { createHmac } from 'node:crypto'
+// Share the cache path/name logic with the download route so the pre-render writes
+// to exactly the path the route reads from — any drift here is a silent permanent
+// cache miss (the very bug class this cache exists to avoid).
+import { REPORT_PDF_BUCKET, reportPdfCachePath, reportPdfFilename } from '../../lib/pdf-cache'
 
-const REPORT_PDF_BUCKET = 'report-pdfs'
 const CHROMIUM_PACK_URL =
   process.env.CHROMIUM_PACK_URL ||
   'https://github.com/Sparticuz/chromium/releases/download/v149.0.0/chromium-v149.0.0-pack.x64.tar'
@@ -39,12 +42,13 @@ const handler = async (req: Request): Promise<Response> => {
 
   const { data: rep } = await supabase
     .from('inspection_reports')
-    .select('updated_at')
+    .select('updated_at, report_reference')
     .eq('id', reportId)
     .maybeSingle()
   if (!rep) return new Response('not found', { status: 404 })
   const version = rep.updated_at ? new Date(rep.updated_at).getTime() : 0
-  const cachePath = `${reportId}/${version}.pdf`
+  const filename = reportPdfFilename(rep.report_reference)
+  const cachePath = reportPdfCachePath(reportId, rep.updated_at, rep.report_reference)
 
   // Mint the same short-lived render token the /render page verifies.
   const exp = Date.now() + 5 * 60 * 1000
@@ -87,10 +91,15 @@ const handler = async (req: Request): Promise<Response> => {
       .from(REPORT_PDF_BUCKET)
       .upload(cachePath, Buffer.from(pdf), { contentType: 'application/pdf', upsert: true })
 
-    // Drop stale versions of this report's cached PDF.
+    // Drop stale versions of this report's cached PDF. `list(reportId)` returns the
+    // current version folder, any older version folders, and legacy flat
+    // `{version}.pdf` files — remove everything that isn't the current version.
+    // A folder entry has no `id`; a legacy flat file does.
     const { data: list } = await supabase.storage.from(REPORT_PDF_BUCKET).list(reportId)
     if (list) {
-      const stale = list.filter((f) => f.name !== `${version}.pdf`).map((f) => `${reportId}/${f.name}`)
+      const stale = list
+        .filter((f) => f.name !== String(version) && f.name !== '.emptyFolderPlaceholder')
+        .map((f) => (f.id ? `${reportId}/${f.name}` : `${reportId}/${f.name}/${filename}`))
       if (stale.length) await supabase.storage.from(REPORT_PDF_BUCKET).remove(stale)
     }
     return new Response('ok')
