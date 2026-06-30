@@ -111,7 +111,6 @@ const ACTION_BTN =
  */
 export function StickyReportActions({
   reportId,
-  reference,
   status,
   saving,
   completing,
@@ -123,7 +122,6 @@ export function StickyReportActions({
   vehicleLabel,
 }: {
   reportId: string
-  reference: string
   status: ReportStatus
   saving: boolean
   completing: boolean
@@ -187,7 +185,6 @@ export function StickyReportActions({
           </Link>
           <PrintButton
             reportId={reportId}
-            reference={reference}
             label="Download"
             busyLabel="…"
             fallbackLabel="Print"

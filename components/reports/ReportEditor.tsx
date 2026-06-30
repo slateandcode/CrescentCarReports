@@ -880,7 +880,6 @@ export function ReportEditor({
 
       <StickyReportActions
         reportId={report.id}
-        reference={report.report_reference}
         status={status}
         saving={saving}
         completing={completing}

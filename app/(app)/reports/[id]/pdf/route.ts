@@ -7,15 +7,35 @@ import { renderUrlToPdf } from '@/lib/pdf'
 import { createPdfToken } from '@/lib/pdf-token'
 import { REPORT_PDF_BUCKET, reportPdfCachePath } from '@/lib/pdf-cache'
 
-function pdfHeaders(filename: string): HeadersInit {
-  return {
-    'Content-Type': 'application/pdf',
-    // `inline` so iOS Safari opens the PDF in its viewer (where the user can
-    // Share → Save to Files / WhatsApp); desktop still force-downloads it via the
-    // blob + download-attribute path in PrintButton.
-    'Content-Disposition': `inline; filename="${filename}"`,
-    'Cache-Control': 'no-store',
-  }
+// Redirect the client to a short-lived signed URL for the cached PDF in Supabase
+// Storage, instead of streaming the bytes back through this function.
+//
+// WHY: Netlify Functions are Lambda-backed and cap the *synchronous response
+// body* at ~6 MB. A real report renders to a ~25-30 MB PDF (lots of photos), so
+// returning it inline overflowed that limit — the invocation failed and the
+// fronting Next middleware edge handler surfaced it as "This edge function has
+// crashed: edge function invocation failed" (small reports under 6 MB worked,
+// big ones didn't). Handing back a 302 to a signed URL keeps the response tiny;
+// the phone pulls the file straight from Supabase's CDN with no size ceiling.
+//
+// `asDownload` controls the disposition Supabase serves the file with:
+//   • false → inline, so iOS Safari opens it in its viewer (Share → Save / WhatsApp)
+//   • true  → attachment, so a desktop browser saves it to disk
+// Returns null when the object isn't cached yet (so the caller can render it).
+async function signedPdfRedirect(
+  svc: ReturnType<typeof createServiceClient>,
+  cachePath: string,
+  filename: string,
+  asDownload: boolean,
+): Promise<Response | null> {
+  const { data, error } = await svc.storage
+    .from(REPORT_PDF_BUCKET)
+    .createSignedUrl(cachePath, 300, asDownload ? { download: filename } : undefined)
+  if (error || !data?.signedUrl) return null
+  const url = data.signedUrl.startsWith('http')
+    ? data.signedUrl
+    : `${process.env.NEXT_PUBLIC_SUPABASE_URL}${data.signedUrl}`
+  return new Response(null, { status: 302, headers: { Location: url, 'Cache-Control': 'no-store' } })
 }
 
 // Needs the Node runtime (spawns a Chrome process) and must never be cached.
@@ -63,22 +83,25 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   }
   const filename = `${reference || 'inspection-report'}.pdf`
   const cachePath = reportPdfCachePath(id, updatedAt)
+  // Desktop asks for an attachment (save to disk) via ?download=1; iOS omits it so
+  // the PDF opens inline in Safari's viewer. See signedPdfRedirect.
+  const asDownload = _req.nextUrl.searchParams.get('download') === '1'
 
   // 1) Serve the pre-rendered PDF if the cache holds this exact version (rendered
-  // by the background function on completion, or by a previous download). This is
-  // the fast, reliable path — no Chromium, so it can't hit the function timeout.
+  // by the background function on completion, or by a previous download). We hand
+  // back a 302 to a signed URL rather than the bytes — no Chromium AND no ~6 MB
+  // function-response ceiling, so a big report can't crash the function.
   try {
     const svc = createServiceClient()
-    const { data: cached } = await svc.storage.from(REPORT_PDF_BUCKET).download(cachePath)
-    if (cached) {
-      return new Response(new Uint8Array(await cached.arrayBuffer()), { headers: pdfHeaders(filename) })
-    }
+    const redirect = await signedPdfRedirect(svc, cachePath, filename, asDownload)
+    if (redirect) return redirect
   } catch {
     // Cache unavailable/misconfigured — fall through to a live render.
   }
 
-  // 2) Cache miss — render now (works when the function is warm), return it, and
-  // best-effort cache the result so the next download of this version is instant.
+  // 2) Cache miss — render now (works when the function is warm), cache it, then
+  // redirect to the freshly-cached copy. The rendered bytes are uploaded to
+  // storage and handed back as a signed URL, never returned as the function body.
   const origin = _req.nextUrl.origin
   // Mint the short-lived render token lazily: renderUrlToPdf invokes this AFTER
   // the browser launches (i.e. after the serverless Chromium cold-start download),
@@ -89,15 +112,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   }
   try {
     const pdf = await renderUrlToPdf(makeUrl)
-    try {
-      const svc = createServiceClient()
-      await svc.storage
-        .from(REPORT_PDF_BUCKET)
-        .upload(cachePath, new Uint8Array(pdf), { contentType: 'application/pdf', upsert: true })
-    } catch {
-      // Caching is best-effort; never fail the download because the write failed.
-    }
-    return new Response(new Uint8Array(pdf), { headers: pdfHeaders(filename) })
+    const svc = createServiceClient()
+    const { error: uploadError } = await svc.storage
+      .from(REPORT_PDF_BUCKET)
+      .upload(cachePath, new Uint8Array(pdf), { contentType: 'application/pdf', upsert: true })
+    if (uploadError) throw uploadError
+    const redirect = await signedPdfRedirect(svc, cachePath, filename, asDownload)
+    if (redirect) return redirect
+    throw new Error('Could not sign the freshly-rendered PDF.')
   } catch (err) {
     // Log the real error server-side, but return a generic body — never leak the
     // internal Chromium/launch error text to the client (it can surface verbatim

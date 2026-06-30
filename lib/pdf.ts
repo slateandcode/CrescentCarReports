@@ -64,34 +64,46 @@ const CHROMIUM_PACK_URL =
  * short-lived render token only once the (slow) serverless Chromium cold-start
  * download has completed, instead of before it (which risked the token expiring
  * mid-cold-start and 500-ing the render).
+ *
+ * The whole thing (launch + render) is bounded by `timeoutMs`. On a serverless
+ * cache miss a cold render can run long; if it would overrun the platform's
+ * function budget the function gets hard-KILLED mid-flight, and because the route
+ * sits behind the Next middleware edge handler that kill surfaces to the user as
+ * "This edge function has crashed". Failing our OWN deadline first turns that into
+ * a clean rejection → the route returns its graceful 500 → PrintButton falls back
+ * to the print dialog. Keep it under the configured Netlify function timeout.
  */
 export async function renderUrlToPdf(
   url: string | (() => string | Promise<string>),
+  { timeoutMs = 24000 }: { timeoutMs?: number } = {},
 ): Promise<Buffer> {
   const puppeteer = (await import('puppeteer-core')).default
   const localChrome = findChrome()
 
-  // Prefer a system browser in dev; fall back to the bundled serverless binary.
-  const launchOptions = localChrome
-    ? {
-        executablePath: localChrome,
-        headless: true,
-        args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
-      }
-    : await (async () => {
-        const chromium = (await import('@sparticuz/chromium-min')).default
-        // The report is inline SVG/HTML — no WebGL — so skip the graphics stack
-        // (avoids extracting swiftshader, trimming serverless cold-start).
-        chromium.setGraphicsMode = false
-        return {
-          executablePath: await chromium.executablePath(CHROMIUM_PACK_URL),
-          headless: true as const,
-          args: chromium.args,
-        }
-      })()
+  let browser: Awaited<ReturnType<typeof puppeteer.launch>> | undefined
+  let timer: ReturnType<typeof setTimeout> | undefined
 
-  const browser = await puppeteer.launch(launchOptions)
-  try {
+  const render = (async (): Promise<Buffer> => {
+    // Prefer a system browser in dev; fall back to the bundled serverless binary.
+    const launchOptions = localChrome
+      ? {
+          executablePath: localChrome,
+          headless: true as const,
+          args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
+        }
+      : await (async () => {
+          const chromium = (await import('@sparticuz/chromium-min')).default
+          // The report is inline SVG/HTML — no WebGL — so skip the graphics stack
+          // (avoids extracting swiftshader, trimming serverless cold-start).
+          chromium.setGraphicsMode = false
+          return {
+            executablePath: await chromium.executablePath(CHROMIUM_PACK_URL),
+            headless: true as const,
+            args: chromium.args,
+          }
+        })()
+
+    browser = await puppeteer.launch(launchOptions)
     const page = await browser.newPage()
     // Resolve the target now (post-launch) so a token thunk is minted fresh.
     const target = typeof url === 'function' ? await url() : url
@@ -102,7 +114,7 @@ export async function renderUrlToPdf(
     // every image's decode so no photo paints half-drawn in the PDF (the report's
     // <img> are eager, so decode resolves promptly; failures are swallowed so one
     // broken signed URL can't abort the whole render).
-    await page.goto(target, { waitUntil: 'load', timeout: 45000 })
+    await page.goto(target, { waitUntil: 'load', timeout: timeoutMs })
     await page.evaluate(async () => {
       const imgs = Array.from(document.images)
       // Defeat loading="lazy" for the one-shot render: force eager and ensure each
@@ -127,7 +139,20 @@ export async function renderUrlToPdf(
       margin: { top: '0', right: '0', bottom: '0', left: '0' },
     })
     return Buffer.from(pdf)
+  })()
+
+  // Swallow a late rejection on the losing promise so racing it can't raise an
+  // unhandled-rejection warning after we've already returned/thrown.
+  render.catch(() => {})
+
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`PDF render exceeded ${timeoutMs}ms`)), timeoutMs)
+  })
+
+  try {
+    return await Promise.race([render, deadline])
   } finally {
-    await browser.close()
+    if (timer) clearTimeout(timer)
+    if (browser) await browser.close().catch(() => {})
   }
 }

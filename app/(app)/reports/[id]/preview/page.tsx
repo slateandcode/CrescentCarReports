@@ -43,7 +43,7 @@ export default async function PreviewPage({
             <Link href={`/reports/${id}/edit`} className="btn-secondary h-11 flex-1 text-sm sm:flex-none">
               <Pencil size={15} /> Edit
             </Link>
-            <PrintButton reportId={id} reference={report.report_reference} className="btn-primary h-11 flex-1 text-sm sm:flex-none" />
+            <PrintButton reportId={id} className="btn-primary h-11 flex-1 text-sm sm:flex-none" />
           </div>
         </div>
         {/* Guidance — the Download button is the reliable path; print is fallback. */}

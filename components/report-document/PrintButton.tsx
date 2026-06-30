@@ -10,14 +10,12 @@ import { Download, Loader2, Printer } from 'lucide-react'
  */
 export function PrintButton({
   reportId,
-  reference,
   className,
   label = 'Download PDF',
   busyLabel = 'Generating…',
   fallbackLabel = 'Print / Save PDF',
 }: {
   reportId: string
-  reference: string
   className?: string
   label?: string
   busyLabel?: string
@@ -26,7 +24,13 @@ export function PrintButton({
   const [busy, setBusy] = useState(false)
   const [fallback, setFallback] = useState(false)
 
-  const pdfUrl = `/reports/${reportId}/pdf`
+  // The route 302-redirects to a short-lived signed Supabase URL for the file
+  // (the bytes never stream back through the Netlify function — that overflowed
+  // the ~6 MB function-response limit on big reports and crashed it). `?download=1`
+  // makes Supabase serve it as an attachment for desktop; iOS omits it so the PDF
+  // opens inline in Safari's viewer.
+  const inlineUrl = `/reports/${reportId}/pdf`
+  const downloadUrl = `/reports/${reportId}/pdf?download=1`
   // Cap the probe so a slow/stuck serverless cold-start can't spin forever — the
   // "download just spins on phone" report. Generous enough for a real cold start
   // (which maxDuration on the route covers), then we fall back.
@@ -44,14 +48,24 @@ export function PrintButton({
     )
   }
 
-  async function fetchWithTimeout(url: string) {
+  async function fetchWithTimeout(url: string, init?: RequestInit) {
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), PROBE_TIMEOUT_MS)
     try {
-      return await fetch(url, { cache: 'no-store', signal: ctrl.signal })
+      return await fetch(url, { cache: 'no-store', signal: ctrl.signal, ...init })
     } finally {
       clearTimeout(timer)
     }
+  }
+
+  // Probe the route WITHOUT downloading the file: `redirect: 'manual'` stops at
+  // the 302, so we confirm the server can serve the PDF (and, on a cache miss,
+  // warm the render) without pulling ~26 MB over mobile data just to check. A 302
+  // surfaces as an opaqueredirect response (ok=false, type='opaqueredirect'); a
+  // real failure (render 500 / 404) comes back as a normal non-ok response.
+  async function probeOk(url: string): Promise<boolean> {
+    const res = await fetchWithTimeout(url, { redirect: 'manual' })
+    return res.type === 'opaqueredirect' || res.ok
   }
 
   // Fallback when the server PDF is unavailable: print the CLEAN, paginated report
@@ -68,38 +82,18 @@ export function PrintButton({
   }
 
   async function downloadPdf() {
-    if (isAppleMobile()) {
-      // iOS opens the inline PDF route in its viewer (Share → Save / WhatsApp),
-      // which a blob: URL can't replicate here. Probe the route first so a
-      // server-render failure falls back to the clean print path instead of
-      // dropping the user on a raw 500 error page. The probe warms the function,
-      // so the hand-off navigation re-renders on a warm lambda (no second cold start).
-      setBusy(true)
-      try {
-        const res = await fetchWithTimeout(pdfUrl)
-        if (!res.ok) throw new Error('PDF unavailable')
-        window.location.href = pdfUrl
-      } catch {
-        setFallback(true)
-        fallbackPrint()
-      } finally {
-        setBusy(false)
-      }
-      return
-    }
+    // iOS opens the PDF inline in its viewer (Share → Save / WhatsApp); desktop
+    // gets the attachment URL so the browser saves it to disk. Either way we just
+    // navigate and let the browser follow the route's 302 to the signed Supabase
+    // URL — no blob, no cross-origin body read. Probe first (manual redirect, so we
+    // don't pull the file twice) so a server-render failure falls back to the clean
+    // print path instead of dropping the user on a raw error page; the probe also
+    // warms a cache-miss render, so the hand-off navigation hits the cached copy.
+    const target = isAppleMobile() ? inlineUrl : downloadUrl
     setBusy(true)
     try {
-      const res = await fetchWithTimeout(pdfUrl)
-      if (!res.ok) throw new Error(await res.text().catch(() => 'PDF generation failed'))
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${reference || 'inspection-report'}.pdf`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(url)
+      if (!(await probeOk(target))) throw new Error('PDF unavailable')
+      window.location.href = target
     } catch {
       // Server render unavailable — fall back to printing the clean report.
       setFallback(true)
