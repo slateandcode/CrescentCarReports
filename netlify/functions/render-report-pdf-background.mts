@@ -16,7 +16,7 @@ import { createHmac } from 'node:crypto'
 // Share the cache path/name logic with the download route so the pre-render writes
 // to exactly the path the route reads from — any drift here is a silent permanent
 // cache miss (the very bug class this cache exists to avoid).
-import { REPORT_PDF_BUCKET, reportPdfCachePath, reportPdfFilename } from '../../lib/pdf-cache'
+import { REPORT_PDF_BUCKET, reportPdfCachePath } from '../../lib/pdf-cache'
 
 const CHROMIUM_PACK_URL =
   process.env.CHROMIUM_PACK_URL ||
@@ -47,7 +47,6 @@ const handler = async (req: Request): Promise<Response> => {
     .maybeSingle()
   if (!rep) return new Response('not found', { status: 404 })
   const version = rep.updated_at ? new Date(rep.updated_at).getTime() : 0
-  const filename = reportPdfFilename(rep.report_reference)
   const cachePath = reportPdfCachePath(reportId, rep.updated_at, rep.report_reference)
 
   // Mint the same short-lived render token the /render page verifies.
@@ -91,15 +90,35 @@ const handler = async (req: Request): Promise<Response> => {
       .from(REPORT_PDF_BUCKET)
       .upload(cachePath, Buffer.from(pdf), { contentType: 'application/pdf', upsert: true })
 
-    // Drop stale versions of this report's cached PDF. `list(reportId)` returns the
-    // current version folder, any older version folders, and legacy flat
-    // `{version}.pdf` files — remove everything that isn't the current version.
+    // Drop stale versions of this report's cached PDF. `list(reportId)` returns
+    // version folders (new layout) and legacy flat `{version}.pdf` files; both
+    // names start with the ms-timestamp version, so parseInt covers both. Only
+    // remove versions STRICTLY OLDER than this run's: two renders can overlap
+    // (each save of a completed report triggers one), and the run holding the
+    // older version must never delete the newer run's freshly-cached PDF — that
+    // re-orphaned the cache this function exists to fill. An extra stale folder
+    // left behind by the losing run is harmless and swept by the next render.
     // A folder entry has no `id`; a legacy flat file does.
     const { data: list } = await supabase.storage.from(REPORT_PDF_BUCKET).list(reportId)
     if (list) {
-      const stale = list
-        .filter((f) => f.name !== String(version) && f.name !== '.emptyFolderPlaceholder')
-        .map((f) => (f.id ? `${reportId}/${f.name}` : `${reportId}/${f.name}/${filename}`))
+      const staleEntries = list.filter((f) => {
+        const v = Number.parseInt(f.name, 10)
+        return Number.isFinite(v) && v < version
+      })
+      const stale: string[] = []
+      for (const f of staleEntries) {
+        if (f.id) {
+          // Legacy flat object `{version}.pdf`.
+          stale.push(`${reportId}/${f.name}`)
+        } else {
+          // Version folder — delete its ACTUAL contents (the leaf filename can
+          // differ from the current reference if the report was renumbered).
+          const { data: contents } = await supabase.storage
+            .from(REPORT_PDF_BUCKET)
+            .list(`${reportId}/${f.name}`)
+          for (const c of contents ?? []) stale.push(`${reportId}/${f.name}/${c.name}`)
+        }
+      }
       if (stale.length) await supabase.storage.from(REPORT_PDF_BUCKET).remove(stale)
     }
     return new Response('ok')

@@ -603,8 +603,10 @@ function MetaRow({ icon, label, value, mono }: { icon: React.ReactNode; label: s
 // Page 3: Executive Summary (Crescent Score)
 // ════════════════════════════════════════════════════════════════════════
 /** Max "Key Issues" rows on the single-page summary before a "+N more" line —
- *  sized to fit alongside the hero + section cards on one A4 sheet. */
-const EXEC_KEY_ISSUE_LIMIT = 6
+ *  sized to fit alongside the hero + section cards on one A4 sheet. Capped at 4:
+ *  more rows overflowed the fixed sheet and got visually cut off (e.g. the 2019
+ *  Dodge Challenger report), so the remainder collapses into a "+N more" line. */
+const EXEC_KEY_ISSUE_LIMIT = 4
 export function ReportExecutiveSummaryPage({
   report,
   template,

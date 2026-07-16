@@ -499,6 +499,11 @@ export function ReportEditor({
       setCompleteError(result.error || 'Could not complete the report.')
       return
     }
+    // The completion UPDATE moved the row's updated_at (DB trigger) — re-adopt it
+    // as the concurrency baseline. Without this every edit made after completing
+    // (fixing a typo, adding a missed photo) false-conflicted against our own
+    // completion write, froze autosave and silently dropped the work.
+    if (result.updated_at) baselineUpdatedAt.current = result.updated_at
     setStatus('completed')
   }
 
@@ -512,6 +517,9 @@ export function ReportEditor({
       setCompleteError(result.error || 'Could not reopen the report.')
       return
     }
+    // Same as onComplete: the reopen UPDATE moved updated_at — re-adopt it so the
+    // first edit after reopening doesn't false-conflict and freeze autosave.
+    if (result.updated_at) baselineUpdatedAt.current = result.updated_at
     setStatus('draft')
   }
 

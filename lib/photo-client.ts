@@ -167,6 +167,44 @@ export interface UploadTarget {
 }
 
 /**
+ * The report-photos bucket's server-side limits (see migration 002/013 and the
+ * live bucket config): file_size_limit = 10 MB, allowed_mime_types = jpeg / png /
+ * webp / heic / heif. An upload outside these is rejected by Storage with an
+ * opaque error ("mime type not supported" / "exceeded the maximum allowed size"),
+ * so pre-check client-side and fail with a message the inspector can act on.
+ */
+const BUCKET_MAX_BYTES = 10 * 1024 * 1024
+
+/**
+ * Identify an image's real type from its magic bytes. Used when the browser
+ * hands us a file with an EMPTY type (common for iOS gallery picks) AND the
+ * compress/transcode path failed — previously that fell through to uploading
+ * with contentType 'application/octet-stream', which the bucket's mime allowlist
+ * REJECTS, so the upload always failed with a cryptic storage error.
+ */
+async function sniffImageMime(blob: Blob): Promise<string | null> {
+  const b = new Uint8Array(await blob.slice(0, 16).arrayBuffer())
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg'
+  if (b.length >= 4 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) {
+    return 'image/png'
+  }
+  // RIFF....WEBP
+  if (
+    b.length >= 12 &&
+    b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
+    b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50
+  ) {
+    return 'image/webp'
+  }
+  // ISO-BMFF "ftyp" box with a HEIC/HEIF brand.
+  if (b.length >= 12 && b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) {
+    const brand = String.fromCharCode(b[8], b[9], b[10], b[11]).toLowerCase()
+    if (['heic', 'heix', 'heif', 'hevc', 'mif1', 'msf1'].includes(brand)) return 'image/heic'
+  }
+  return null
+}
+
+/**
  * Upload one image to Storage from the browser, record its metadata row, and
  * return a PhotoRef the editor stores in the report JSON. Throws on failure so
  * the caller can surface an error to the inspector.
@@ -184,14 +222,29 @@ export async function uploadPhoto(file: File, target: UploadTarget): Promise<Pho
   // Safari/most browsers already hand us JPEG, so `upload.type` isn't heic here.)
   // Detect HEIC by extension too: a type-less HEIC that couldn't be transcoded
   // above would otherwise slip past a MIME-only check and upload as a blank photo.
-  const uploadType = upload.type.toLowerCase()
+  let uploadType = upload.type.toLowerCase()
   const uploadName = upload.name.toLowerCase()
-  if (
-    uploadType === 'image/heic' ||
-    uploadType === 'image/heif' ||
-    /\.(heic|heif)$/.test(uploadName)
-  ) {
+
+  // Type-less file (compressImage couldn't transcode it): identify the real type
+  // from the bytes. The bucket's mime allowlist rejects 'application/octet-stream',
+  // so uploading without a concrete image type ALWAYS failed with a cryptic
+  // storage error — sniff it instead, and fail clearly if it isn't an image.
+  if (!uploadType) {
+    const sniffed = await sniffImageMime(upload).catch(() => null)
+    if (!sniffed) {
+      throw new Error("Couldn't read this file as a photo — please choose a JPEG or PNG.")
+    }
+    uploadType = sniffed
+  }
+
+  if (uploadType === 'image/heic' || uploadType === 'image/heif' || /\.(heic|heif)$/.test(uploadName)) {
     throw new Error("This photo format (HEIC) isn't supported — please choose a JPEG or PNG.")
+  }
+
+  // Pre-empt the bucket's 10 MB object limit (hit when compression failed and we
+  // fell back to a full-size original) with an actionable message.
+  if (upload.size > BUCKET_MAX_BYTES) {
+    throw new Error('This photo is over 10 MB and could not be compressed — please retry, or use a smaller photo.')
   }
 
   const folder = target.itemId
@@ -203,9 +256,7 @@ export async function uploadPhoto(file: File, target: UploadTarget): Promise<Pho
 
   const { error: uploadErr } = await supabase.storage
     .from(PHOTO_BUCKET)
-    // Never store an empty content-type — fall back to octet-stream so the
-    // object is at least served with a concrete type.
-    .upload(path, upload, { contentType: upload.type || 'application/octet-stream', upsert: false })
+    .upload(path, upload, { contentType: uploadType, upsert: false })
   if (uploadErr) throw new Error(uploadErr.message)
 
   // Bucket is PRIVATE (migration 013): mint a signed URL so the editor can show

@@ -5,6 +5,7 @@ import { getReportById } from '@/lib/data'
 import { IS_DEMO } from '@/lib/env'
 import { renderUrlToPdf } from '@/lib/pdf'
 import { createPdfToken } from '@/lib/pdf-token'
+import { triggerPdfPrerender } from '@/lib/pdf-prerender'
 import {
   REPORT_PDF_BUCKET,
   reportPdfCachePath,
@@ -41,6 +42,52 @@ async function signedPdfRedirect(
     ? data.signedUrl
     : `${process.env.NEXT_PUBLIC_SUPABASE_URL}${data.signedUrl}`
   return new Response(null, { status: 302, headers: { Location: url, 'Cache-Control': 'no-store' } })
+}
+
+// Last-resort fallback when the exact current version isn't cached AND the live
+// render failed: serve the NEWEST cached render of this report instead of a hard
+// error. The cache is keyed on updated_at, so any post-completion write (an edit,
+// an admin reassignment) orphans the previous render; that copy is at most one
+// edit behind — for a completed report, almost always identical in content — and
+// the caller has already fired a background re-render to converge the cache, so
+// staleness is bounded to this one download. A failed download helps nobody.
+async function newestCachedPdfRedirect(
+  svc: ReturnType<typeof createServiceClient>,
+  reportId: string,
+  filename: string,
+  asDownload: boolean,
+): Promise<Response | null> {
+  const { data: entries, error } = await svc.storage.from(REPORT_PDF_BUCKET).list(reportId)
+  if (error || !entries?.length) return null
+  // Newest first. Version-folder entries (new layout) have no `id`; legacy flat
+  // `{version}.pdf` objects do. Both names start with the ms timestamp, so one
+  // numeric sort covers both layouts.
+  const versioned = entries
+    .map((e) => ({ entry: e, version: Number.parseInt(e.name, 10) }))
+    .filter((v) => Number.isFinite(v.version))
+    .sort((a, b) => b.version - a.version)
+  for (const { entry } of versioned) {
+    if (entry.id) {
+      // Legacy flat object `{reportId}/{version}.pdf`.
+      if (!entry.name.endsWith('.pdf')) continue
+      const redirect = await signedPdfRedirect(svc, `${reportId}/${entry.name}`, filename, asDownload)
+      if (redirect) return redirect
+    } else {
+      // Version folder — sign whatever PDF it holds (the leaf name can differ
+      // from the current reference if the report was renumbered since).
+      const { data: files } = await svc.storage.from(REPORT_PDF_BUCKET).list(`${reportId}/${entry.name}`)
+      const pdf = files?.find((f) => f.name.toLowerCase().endsWith('.pdf'))
+      if (!pdf) continue
+      const redirect = await signedPdfRedirect(
+        svc,
+        `${reportId}/${entry.name}/${pdf.name}`,
+        filename,
+        asDownload,
+      )
+      if (redirect) return redirect
+    }
+  }
+  return null
 }
 
 // Needs the Node runtime (spawns a Chrome process) and must never be cached.
@@ -117,10 +164,16 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     // Cache unavailable/misconfigured — fall through to a live render.
   }
 
+  // Exact-version cache miss. Ask the background function (15-min budget) to
+  // re-render this version NOW, before we attempt the risky in-request render:
+  // even if the live render below dies on a serverless cold start, the cache
+  // heals within a minute or two and the next click downloads instantly.
+  const origin = _req.nextUrl.origin
+  if (!IS_DEMO) await triggerPdfPrerender(id, origin)
+
   // 2) Cache miss — render now (works when the function is warm), cache it, then
   // redirect to the freshly-cached copy. The rendered bytes are uploaded to
   // storage and handed back as a signed URL, never returned as the function body.
-  const origin = _req.nextUrl.origin
   // Mint the short-lived render token lazily: renderUrlToPdf invokes this AFTER
   // the browser launches (i.e. after the serverless Chromium cold-start download),
   // so a slow cold start can't expire the token before /render verifies it.
@@ -143,6 +196,16 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     // internal Chromium/launch error text to the client (it can surface verbatim
     // in the iOS viewer on a failed render).
     console.error('[pdf] render failed', err)
+    // 3) Live render failed (typically a serverless cold start overrunning the
+    // budget). Serve the newest cached render instead of failing the download —
+    // the background re-render fired above converges the cache for next time.
+    try {
+      const svc = createServiceClient()
+      const redirect = await newestCachedPdfRedirect(svc, id, filename, asDownload)
+      if (redirect) return redirect
+    } catch {
+      // No cache available either — fall through to the plain error.
+    }
     return new Response(
       "Could not generate the PDF. Please use your browser's Print / Save as PDF instead.",
       { status: 500, headers: { 'Content-Type': 'text/plain' } },

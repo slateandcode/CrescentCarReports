@@ -2,13 +2,24 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ArrowLeft, Pencil, Info } from 'lucide-react'
 import { requireUser } from '@/lib/auth'
-import { getReportWithInspector } from '@/lib/data'
+import { getReportById, getReportWithInspector } from '@/lib/data'
 import { ReportDocument } from '@/components/report-document/ReportDocument'
 import { PrintButton } from '@/components/report-document/PrintButton'
 import { AutoPrint } from '@/components/report-document/AutoPrint'
 
-export const metadata = { title: 'Report preview' }
 export const dynamic = 'force-dynamic'
+
+// Title = the report reference. The browser print dialog (the fallback when the
+// server PDF is unavailable) names the saved file after document.title, so a
+// static "Report preview" title made every fallback download save as
+// "Report preview.pdf" instead of "CCR-2026-0042.pdf".
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const report = await getReportById(id)
+  // `absolute` bypasses the layout's "%s · Crescent Car Reports" template — the
+  // title IS the filename in the print dialog, so keep it to the bare reference.
+  return { title: { absolute: report?.report_reference || 'Report preview' } }
+}
 
 export default async function PreviewPage({
   params,

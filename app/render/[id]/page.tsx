@@ -6,7 +6,24 @@ import { ReportDocument } from '@/components/report-document/ReportDocument'
 // Node runtime (verifies the HMAC token); never cache.
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Report', robots: { index: false, follow: false } }
+
+// Title = the report reference (token-gated like the page): headless Chrome
+// embeds document.title as the PDF's Title metadata, which some viewers/share
+// sheets display — "CCR-2026-0042" beats a generic "Report".
+export async function generateMetadata({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ pdf?: string }>
+}) {
+  const fallback = { title: { absolute: 'Report' }, robots: { index: false, follow: false } }
+  const { id } = await params
+  const { pdf } = await searchParams
+  if (!verifyPdfToken(pdf, id)) return fallback
+  const result = await getReportWithInspectorAdmin(id)
+  return { ...fallback, title: { absolute: result?.report.report_reference || 'Report' } }
+}
 
 /**
  * Bare print surface used ONLY by the server-side PDF generator. It lives

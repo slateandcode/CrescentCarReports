@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { IS_DEMO } from '@/lib/env'
 import { getSessionUser } from '@/lib/auth'
+import { triggerPdfPrerender } from '@/lib/pdf-prerender'
 import { generatePublicId } from '@/lib/utils'
 import { computeCounts, mergeFindings, seedDefaultChecklist } from '@/lib/report-utils'
 import { validateForCompletion } from '@/lib/report-validation'
@@ -209,6 +210,13 @@ export async function saveReport(
   const { data, error } = await query.select('updated_at').maybeSingle()
 
   if (error) return { ok: false, error: error.message }
+  if (data && existing.status === 'completed') {
+    // The PDF cache is keyed on updated_at, so this save just orphaned the
+    // pre-rendered PDF of a COMPLETED (i.e. downloadable/shareable) report.
+    // Re-render it in the background so the next download is a cache hit again
+    // instead of falling onto the fragile cold-start live render.
+    await triggerPdfPrerender(id)
+  }
   if (!data) {
     // No row matched. With a precondition this means a concurrent write moved
     // updated_at on (the row still exists / is accessible). Surface it as a
@@ -227,29 +235,6 @@ export async function saveReport(
 }
 
 /** Validate + mark a report completed. */
-/**
- * Fire-and-forget: ask the background function to pre-render this report's PDF
- * into the cache so the next (often mobile) download is instant instead of waiting
- * on a cold-start Chromium render. Awaits only the 202 ack; the render runs in the
- * background function's own lifecycle. Never throws into the caller — the download
- * route still renders on demand if this didn't run (e.g. local dev, where there's
- * no Netlify functions runtime).
- */
-async function triggerPdfPrerender(id: string): Promise<void> {
-  const secret = process.env.PDF_TOKEN_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY
-  const base = (process.env.NEXT_PUBLIC_APP_URL || process.env.URL || '').replace(/\/$/, '')
-  if (!secret || !base) return
-  try {
-    await fetch(`${base}/.netlify/functions/render-report-pdf-background`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reportId: id, auth: secret }),
-    })
-  } catch {
-    // Best-effort pre-warm; the download route renders on demand if it didn't run.
-  }
-}
-
 export async function completeReport(id: string): Promise<SaveResult> {
   if (IS_DEMO) {
     const { demoGetReport, demoSetStatus } = await import('@/lib/demo')
@@ -278,12 +263,20 @@ export async function completeReport(id: string): Promise<SaveResult> {
   const result = validateForCompletion(report as InspectionReport)
   if (!result.ok) return { ok: false, error: result.errors.join(' ') }
 
-  const { error } = await supabase
+  // Return the post-update `updated_at` (moved by the DB trigger) so the editor
+  // can re-adopt its optimistic-concurrency baseline. Without this, the editor's
+  // baseline goes stale the moment a report is completed, and EVERY later edit —
+  // including freshly-uploaded photos — false-conflicts, freezes autosave and
+  // forces a reload (the "photos don't save after completing" bug).
+  const { data, error } = await supabase
     .from('inspection_reports')
     .update({ status: 'completed', completed_at: new Date().toISOString() })
     .eq('id', id)
+    .select('updated_at')
+    .maybeSingle()
 
   if (error) return { ok: false, error: error.message }
+  if (!data) return { ok: false, error: 'Report not found or access denied.' }
 
   revalidatePath('/reports')
   revalidatePath('/dashboard')
@@ -292,7 +285,7 @@ export async function completeReport(id: string): Promise<SaveResult> {
   // Pre-render the PDF into the cache so the download is instant for the inspector
   // and the customer (the report is final at completion).
   await triggerPdfPrerender(id)
-  return { ok: true }
+  return { ok: true, updated_at: data.updated_at }
 }
 
 /** Move a completed report back to draft for further edits. */
@@ -307,13 +300,19 @@ export async function reopenReport(id: string): Promise<SaveResult> {
   if (!session) return { ok: false, error: 'Your session has expired. Please sign in again.' }
 
   const supabase = await createClient()
-  const { error } = await supabase
+  // As in completeReport: hand the fresh updated_at back so the editor re-adopts
+  // its concurrency baseline — otherwise the first save after a reopen
+  // false-conflicts and freezes autosave.
+  const { data, error } = await supabase
     .from('inspection_reports')
     .update({ status: 'draft', completed_at: null })
     .eq('id', id)
+    .select('updated_at')
+    .maybeSingle()
   if (error) return { ok: false, error: error.message }
+  if (!data) return { ok: false, error: 'Report not found or access denied.' }
   revalidatePath(`/reports/${id}/edit`)
-  return { ok: true }
+  return { ok: true, updated_at: data.updated_at }
 }
 
 export async function setReportStatus(
