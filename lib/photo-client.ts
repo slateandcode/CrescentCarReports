@@ -17,10 +17,23 @@ function extOf(file: File): string {
 
 /** Don't bother recompressing anything already this small. */
 const COMPRESS_MIN_BYTES = 400_000
-/** Longest edge after downscale — ample for A4 print + on-screen zoom. */
-const COMPRESS_MAX_EDGE = 2000
-/** JPEG quality for the re-encode. */
-const COMPRESS_QUALITY = 0.85
+/**
+ * Longest edge after downscale. Report photos print in grid cells well under
+ * half an A4 width, and even a full-width shot at 186mm needs only ~1600px for
+ * ~220dpi — visually indistinguishable from the old 2000px on paper or screen.
+ *
+ * Why it was lowered (2000 → 1600, quality 0.85 → 0.78): Chromium embeds every
+ * photo in the PDF at its stored size, and photo-heavy reports (80+ images)
+ * crossed the Supabase project's HARD 50 MiB storage upload limit — past it the
+ * rendered PDF gets a 413 and can never be cached, killing the download. The
+ * two changes together roughly halve the bytes per photo, which keeps even the
+ * biggest reports comfortably under the ceiling (and makes uploads + downloads
+ * lighter on mobile data). Quality 0.78 is still visually clean at print size;
+ * don't lower it much further without eyeballing a real report.
+ */
+const COMPRESS_MAX_EDGE = 1600
+/** JPEG quality for the re-encode — see the sizing rationale above. */
+const COMPRESS_QUALITY = 0.78
 
 /**
  * Signed-URL TTL (seconds). The bucket is PRIVATE (migration 013), so every
@@ -93,9 +106,9 @@ function processInWorker(blob: Blob, degrees = 0): Promise<Blob | null> {
 
 /**
  * Downscale + re-encode a camera photo in the browser before upload. A modern
- * phone shot is 4–12 MB; at A4 print size 2000px/JPEG-0.85 looks identical but
- * is a fraction of the bytes — so uploads are quicker and the preview/PDF have
- * far less to re-fetch. Always falls back to the original file on any failure
+ * phone shot is 4–12 MB; at A4 print size 1600px/JPEG-0.78 looks near identical
+ * but is a fraction of the bytes — so uploads are quicker and the preview/PDF
+ * have far less to re-fetch. Always falls back to the original file on any failure
  * (unsupported codec, no canvas, bigger result), so it can never break upload.
  */
 async function compressImage(file: File): Promise<File> {
