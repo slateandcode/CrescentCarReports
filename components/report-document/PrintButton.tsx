@@ -14,12 +14,19 @@ export function PrintButton({
   label = 'Download PDF',
   busyLabel = 'Generating…',
   fallbackLabel = 'Print / Save PDF',
+  beforeDownload,
 }: {
   reportId: string
   className?: string
   label?: string
   busyLabel?: string
   fallbackLabel?: string
+  /** Awaited before the PDF request fires. The editor passes its autosave
+   *  flush here so a Download within the debounce window (or mid-save) renders
+   *  what's on screen — e.g. the just-flipped branding toggle — instead of the
+   *  last persisted snapshot. Best-effort: a failed flush never blocks the
+   *  download (the editor already surfaces save errors on its own). */
+  beforeDownload?: () => Promise<unknown>
 }) {
   const [busy, setBusy] = useState(false)
   const [fallback, setFallback] = useState(false)
@@ -63,9 +70,19 @@ export function PrintButton({
   // warm the render) without pulling ~26 MB over mobile data just to check. A 302
   // surfaces as an opaqueredirect response (ok=false, type='opaqueredirect'); a
   // real failure (render 500 / 404) comes back as a normal non-ok response.
-  async function probeOk(url: string): Promise<boolean> {
+  //
+  // 'unauthorized' is called out separately because an opaque redirect carries no
+  // status or headers: when a lapsed session was answered with a redirect to
+  // /login it looked EXACTLY like success here, and we navigated the inspector to
+  // the login page in place of their PDF. The proxy and the route now both answer
+  // this path with a readable 401 instead — see lib/supabase/middleware.ts.
+  type ProbeResult = 'ok' | 'unauthorized' | 'failed'
+
+  async function probe(url: string): Promise<ProbeResult> {
     const res = await fetchWithTimeout(url, { redirect: 'manual' })
-    return res.type === 'opaqueredirect' || res.ok
+    if (res.type === 'opaqueredirect' || res.ok) return 'ok'
+    if (res.status === 401) return 'unauthorized'
+    return 'failed'
   }
 
   // Fallback when the server PDF is unavailable: print the CLEAN, paginated report
@@ -92,7 +109,22 @@ export function PrintButton({
     const target = isAppleMobile() ? inlineUrl : downloadUrl
     setBusy(true)
     try {
-      if (!(await probeOk(target))) throw new Error('PDF unavailable')
+      // Persist any pending edits FIRST — the server renders from the DB, so
+      // without this a click inside the autosave debounce would produce a PDF
+      // of the previous save. Never throws (flush swallows its own errors), but
+      // guard anyway so a surprise rejection degrades to the old behaviour
+      // (render last-saved state) rather than aborting the download.
+      if (beforeDownload) await beforeDownload().catch(() => {})
+      const result = await probe(target)
+      if (result === 'unauthorized') {
+        // Session lapsed mid-shift — routine for inspectors on the road. Send them
+        // to sign in and back to the report. The print fallback is NOT the answer
+        // here: it navigates to the preview page, which just bounces to /login too,
+        // with nothing explaining why the download vanished.
+        window.location.href = `/login?redirect=${encodeURIComponent(`/reports/${reportId}/preview`)}`
+        return
+      }
+      if (result !== 'ok') throw new Error('PDF unavailable')
       window.location.href = target
     } catch {
       // Server render unavailable — fall back to printing the clean report.

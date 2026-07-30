@@ -1,6 +1,16 @@
 import 'server-only'
 
 /**
+ * Hard cap on how long we'll wait for the invocation ack. triggerPdfPrerender is
+ * AWAITED on request paths — every autosave of a completed report, completeReport,
+ * and the download route just before its own live render — so an unbounded fetch
+ * here could stall a save on a phone or eat the PDF route's render budget. Netlify
+ * queues a background function and 202s immediately, so this only ever trips when
+ * something is genuinely wrong, and the render is best-effort anyway.
+ */
+const ACK_TIMEOUT_MS = 5000
+
+/**
  * Fire-and-forget: ask the Netlify background function to (re-)render a report's
  * PDF into the Supabase cache, so the next download is an instant signed-URL hit
  * instead of a cold-start Chromium render on the request path.
@@ -28,8 +38,10 @@ export async function triggerPdfPrerender(id: string, originFallback?: string): 
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reportId: id, auth: secret }),
+      signal: AbortSignal.timeout(ACK_TIMEOUT_MS),
     })
   } catch {
-    // Best-effort pre-warm; the download route renders on demand if it didn't run.
+    // Best-effort pre-warm (including an aborted ack); the download route renders
+    // on demand if it didn't run.
   }
 }

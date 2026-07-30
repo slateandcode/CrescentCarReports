@@ -21,6 +21,38 @@ function isPublicPath(pathname: string): boolean {
 }
 
 /**
+ * Routes that must answer a signed-out request with a STATUS CODE, not an HTML
+ * redirect, because a machine reads the response.
+ *
+ * `/reports/:id/pdf` is probed by PrintButton with `fetch(..., { redirect:
+ * 'manual' })` to check the server can serve the file before navigating to it.
+ * A 302 to /login is indistinguishable there from the 302 to the signed Supabase
+ * URL — both surface as an opaque redirect with status 0 — so an expired session
+ * read as SUCCESS and the inspector was navigated onto the login page instead of
+ * getting a PDF or the print fallback. Answering 401 lets the probe tell the two
+ * apart and send them to sign in properly.
+ */
+function isStatusCodePath(pathname: string): boolean {
+  return /^\/reports\/[^/]+\/pdf$/.test(pathname)
+}
+
+/**
+ * 401 that CARRIES the cookies Supabase wrote onto `response` — same pitfall
+ * redirectWithCookies guards against (a bare response drops a rotated session or
+ * sign-out's cleared cookies).
+ */
+function unauthorizedWithCookies(message: string, response: NextResponse): NextResponse {
+  const res = new NextResponse(message, {
+    status: 401,
+    headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' },
+  })
+  for (const cookie of response.cookies.getAll()) {
+    res.cookies.set(cookie.name, cookie.value, cookie)
+  }
+  return res
+}
+
+/**
  * Build a redirect that CARRIES the cookies Supabase wrote onto `response`
  * (a refreshed/rotated session, or sign-out's cleared cookies). A bare
  * NextResponse.redirect drops them — the documented @supabase/ssr middleware
@@ -129,6 +161,9 @@ export async function updateSession(request: NextRequest) {
 
   // Signed out + private route → bounce to login (preserve intended path).
   if (!userId && !onPublic) {
+    if (isStatusCodePath(pathname)) {
+      return unauthorizedWithCookies('Your session has expired. Please sign in again.', response)
+    }
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     url.searchParams.set('redirect', pathname)
@@ -162,6 +197,14 @@ export async function updateSession(request: NextRequest) {
 
       if ((inactive || suspended) && !onPublic) {
         await supabase.auth.signOut()
+        if (isStatusCodePath(pathname)) {
+          return unauthorizedWithCookies(
+            suspended
+              ? 'Your account is currently suspended. Contact an administrator.'
+              : 'You were signed out after 14 days of inactivity. Please sign in again.',
+            response,
+          )
+        }
         const url = request.nextUrl.clone()
         url.pathname = '/login'
         url.searchParams.set('reason', suspended ? 'suspended' : 'inactive')

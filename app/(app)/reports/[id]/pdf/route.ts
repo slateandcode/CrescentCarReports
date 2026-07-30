@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server'
-import { requireUser } from '@/lib/auth'
+import { getSessionUser } from '@/lib/auth'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { getReportById } from '@/lib/data'
 import { IS_DEMO } from '@/lib/env'
@@ -17,12 +17,22 @@ import {
 // Storage, instead of streaming the bytes back through this function.
 //
 // WHY: Netlify Functions are Lambda-backed and cap the *synchronous response
-// body* at ~6 MB. A real report renders to a ~25-30 MB PDF (lots of photos), so
+// body* at ~6 MB. A real report renders to a 25-50 MB PDF (lots of photos), so
 // returning it inline overflowed that limit — the invocation failed and the
 // fronting Next middleware edge handler surfaced it as "This edge function has
 // crashed: edge function invocation failed" (small reports under 6 MB worked,
 // big ones didn't). Handing back a 302 to a signed URL keeps the response tiny;
-// the phone pulls the file straight from Supabase's CDN with no size ceiling.
+// the phone pulls the file straight from Supabase's CDN.
+//
+// SIZE CEILING: the Supabase project's global storage upload limit is 50 MiB
+// (52,428,800 bytes) — measured, not assumed: a 49.9 MiB upload succeeds and
+// 50 MiB + 1 byte returns 413 "The object exceeded the maximum allowed size".
+// Photo-heavy reports have started crossing it (a 20-photo/81-image/21-page
+// report renders to ~50.8 MB), and such a report CANNOT be cached at all: both
+// this route's upload and the background pre-render's get a 413. It then falls
+// through to the newest cached copy, and failing that to the browser's print
+// dialog via PrintButton. Raising the limit (Supabase dashboard → Storage
+// settings, paid plans only) or shrinking the embedded photos is the real fix.
 //
 // `asDownload` controls the disposition Supabase serves the file with:
 //   • false → inline, so iOS Safari opens it in its viewer (Share → Save / WhatsApp)
@@ -57,7 +67,15 @@ async function newestCachedPdfRedirect(
   filename: string,
   asDownload: boolean,
 ): Promise<Response | null> {
-  const { data: entries, error } = await svc.storage.from(REPORT_PDF_BUCKET).list(reportId)
+  // Explicit limit + DESCENDING name order matter: storage-js defaults to 100
+  // entries sorted by name ASCENDING, and version names are ms timestamps — so
+  // the default page is the OLDEST 100 versions. Sorting that page numerically
+  // still only picks the newest of the oldest, meaning a report with more than
+  // 100 cached versions handed the customer a long-stale PDF under the current
+  // report's filename. Ask for the newest first, and for far more than one page.
+  const { data: entries, error } = await svc.storage
+    .from(REPORT_PDF_BUCKET)
+    .list(reportId, { limit: 1000, sortBy: { column: 'name', order: 'desc' } })
   if (error || !entries?.length) return null
   // Newest first. Version-folder entries (new layout) have no `id`; legacy flat
   // `{version}.pdf` objects do. Both names start with the ms timestamp, so one
@@ -109,7 +127,20 @@ export const maxDuration = 60
  */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  await requireUser()
+  // 401 rather than requireUser()'s redirect to /login. PrintButton probes this
+  // route with `fetch(..., { redirect: 'manual' })`, where a 3xx to /login is
+  // INDISTINGUISHABLE from the 302 to the signed PDF URL (both surface as an
+  // opaque redirect) — so an expired session read as success and the inspector
+  // was navigated onto the login page instead of getting a PDF or the print
+  // fallback. A status code the probe can actually read fixes that. The proxy
+  // does the same for this path (lib/supabase/middleware.ts) since it runs first.
+  const session = await getSessionUser()
+  if (!session) {
+    return new Response('Your session has expired. Please sign in again.', {
+      status: 401,
+      headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' },
+    })
+  }
 
   // Lightweight authorised lookup (RLS-scoped): enough to authorise the request,
   // name the file, and key the cache — no need to fetch/sign the whole report here
