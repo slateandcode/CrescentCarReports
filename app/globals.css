@@ -7,6 +7,16 @@
      Tailwind shell colours resolve to these variables (see tailwind.config.ts).
      :root holds the default DARK theme; [data-theme="light"] overrides it. The
      printable report uses the fixed doc-* tokens and is never themed. */
+
+  /* Brand accent, in "R G B" channel form so Tailwind's `<alpha-value>` slot
+     can build rgb(… / .15) from it. Sits outside the theme blocks below: the
+     accent is the one colour that does NOT change between the light and dark
+     shell — but it IS re-pointed per report brand inside the printable
+     document (see .report-doc--alpha further down). */
+  :root {
+    --accent-rgb: 255 198 0;
+  }
+
   :root,
   [data-theme='dark'] {
     --color-background: #0a0a0a;
@@ -188,6 +198,37 @@
 }
 .report-doc--unbranded .brand-only {
   display: none !important;
+}
+
+/* ── Alpha Worldwide brand (report.report_brand, migration 022) ──────────
+   Same mechanism as white-label above, one axis over: `alpha-only` chrome
+   appears and `not-alpha` chrome (the near-black Crescent header bar) goes
+   away. `brand-only` — which marks Crescent-specific imagery such as the page
+   watermark — is hidden here too, because "branded" in that class means
+   Crescent, not "has a brand".
+
+   The palette swap is the whole point of routing `accent` through a variable
+   (tailwind.config.ts): re-pointing --accent-rgb on the document root turns
+   every text-accent / bg-accent / border-accent inside the report from gold to
+   Alpha's light blue, gradients and opacity modifiers included, without a
+   single utility class changing in the page components. */
+.report-doc .alpha-only {
+  display: none;
+}
+.report-doc--alpha .alpha-only {
+  display: revert;
+}
+.report-doc--alpha .not-alpha,
+.report-doc--alpha .brand-only {
+  display: none !important;
+}
+.report-doc--alpha {
+  --accent-rgb: 34 165 219; /* #22a5db — Alpha light blue */
+}
+/* Alpha print their report reference in the brand blue; Crescent's stays the
+   quiet mono grey DocFooter sets, so this only paints under the modifier. */
+.report-doc--alpha .doc-ref {
+  color: rgb(var(--accent-rgb));
 }
 
 @media screen {

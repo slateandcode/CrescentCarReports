@@ -26,6 +26,7 @@ import type {
 } from '@/lib/report-types'
 import type { ResolvedTemplate, SectionDef } from '@/lib/report-templates'
 import { getTemplate } from '@/lib/report-templates'
+import { brandConfig } from '@/lib/report-brand'
 import {
   computeCounts,
   sectionCounts,
@@ -64,6 +65,7 @@ import {
   DocStatusBadge,
   RecommendationBadge,
   DocImg,
+  ALPHA_NAVY,
 } from './DocPrimitives'
 import { HealthGauge } from './ReportDonutChart'
 import {
@@ -472,6 +474,82 @@ export function ReportCoverPage({ report, template }: { report: InspectionReport
   )
 }
 
+// ════════════════════════════════════════════════════════════════════════
+// Page 1: Cover — Alpha Worldwide
+// ════════════════════════════════════════════════════════════════════════
+/**
+ * Alpha Worldwide's cover, reproduced from the artwork they supplied.
+ *
+ * Deliberately takes no report: the brief is "use this as the first page
+ * regardless of what car it is". So unlike the Crescent cover — which carries
+ * the vehicle line, the customer name and a stat card of package/date/
+ * reference/score — this one is a fixed poster. Every one of those facts still
+ * reaches the reader on the Vehicle Summary page that follows, and the
+ * reference rides the footer of every subsequent page.
+ */
+export function ReportAlphaCoverPage() {
+  return (
+    <DocPage className="overflow-hidden">
+      {/* Full-bleed rule in their light blue — the cover's one horizontal edge. */}
+      <div className="absolute inset-x-0 top-0 h-[7px] bg-accent" />
+
+      {/* Their mark, ghosted behind the top-right corner. Deliberately NOT
+          object-contain: the supplied cover stretches the chevron tall and
+          narrow (142 × 247 on the sheet), and letting it fill the box
+          reproduces that rather than snapping back to the square asset. */}
+      <span className="pointer-events-none absolute right-[40px] top-[56px] block h-[247px] w-[142px] opacity-[0.07]">
+        <DocImg src="/alpha-mark.png" />
+      </span>
+
+      {/* The car runs well off the right edge — the artwork frames it from the
+          left headlight across, with roughly a third of the body past the trim.
+          Box is the image's own 1.43 aspect so object-contain adds no
+          letterboxing, and it is painted before the headline so "YOU INVEST."
+          crosses over it, as in the artwork. Geometry (left edge at 45% of the
+          sheet, 43% of sheet height) is measured off the supplied cover. */}
+      <div className="absolute right-[-254px] top-[359px] h-[483px] w-[691px]">
+        <DocImg src="/cover-car.png" className="object-contain" />
+      </div>
+
+      <div className="relative px-14 pt-[56px]">
+        <span className="relative block h-[132px] w-[304px]">
+          <DocImg src="/alpha-worldwide.png" alt="Alpha Worldwide" className="object-contain object-left" />
+        </span>
+      </div>
+
+      <div className="relative mt-[171px] px-14">
+        <div className="h-[4px] w-12 rounded-full bg-accent" />
+        <p
+          className="mt-8 text-[12px] font-bold uppercase tracking-[0.34em]"
+          style={{ color: ALPHA_NAVY }}
+        >
+          Vehicle Inspection Report
+        </p>
+        <h1 className="mt-5 text-[62px] font-black italic uppercase leading-[1.1] tracking-tight text-doc-ink">
+          <span className="block">Inspect</span>
+          <span className="block text-accent">Before</span>
+          <span className="block">You Invest.</span>
+        </h1>
+        <p className="mt-7 text-[14px] font-medium text-doc-muted">
+          Buy With Confidence and Avoid Hidden Surprises!
+        </p>
+        <div className="mt-9 h-[4px] w-12 rounded-full bg-accent" />
+      </div>
+
+      <div className="relative mt-auto flex items-center justify-between border-t border-doc-border px-14 py-7 text-[13.5px]">
+        <span className="flex items-center gap-2.5 font-medium text-doc-ink">
+          <Globe size={16} className="text-accent" />
+          alphaworldwide.me
+        </span>
+        <p className="font-medium text-doc-ink">
+          Driven by <span className="text-accent">Trust</span>. Backed by{' '}
+          <span className="text-accent">Detail</span>.
+        </p>
+      </div>
+    </DocPage>
+  )
+}
+
 /** Gold arc that fills to the actual score — every cover's gauge is its own. */
 function ScoreRing({ score }: { score: number }) {
   const r = 15.5
@@ -647,8 +725,10 @@ export function ReportExecutiveSummaryPage({
   const rec = normalizeRecommendation(report.buyer_recommendation) ?? recommendationFromScore(score)
   const cards = sectionScores(report.package_type, checklist)
   const majorFindings = deriveAutoFindings(report.package_type, checklist)
-  // White-label: the score keeps its meaning but loses the brand's name for it.
-  const scoreName = report.hide_branding ? 'Overall Score' : 'Crescent Score'
+  // The score keeps its meaning but takes the name of whoever's document this
+  // is — "Crescent Score" on a Crescent report, plain "Overall Score" on an
+  // Alpha one or in white-label mode (which still wins over any brand).
+  const scoreName = report.hide_branding ? 'Overall Score' : brandConfig(report).scoreName
 
   return (
     <DocPage>
@@ -1322,7 +1402,7 @@ export function ReportFinalNotesPage({
           ? `Report issued on ${completed}.`
           : report.hide_branding
             ? 'Report prepared by your inspection team.'
-            : 'Report prepared by Crescent Car Check.'}
+            : `Report prepared by ${brandConfig(report).name}.`}
       </div>
       <p className="mt-1.5 text-[11px] text-doc-muted">
         Reference {report.report_reference} · {template.name} · {template.pointLabel}

@@ -9,23 +9,35 @@ import { triggerPdfPrerender } from '@/lib/pdf-prerender'
 import { generatePublicId } from '@/lib/utils'
 import { computeCounts, mergeFindings, seedDefaultChecklist } from '@/lib/report-utils'
 import { validateForCompletion } from '@/lib/report-validation'
+import { VALID_BRANDS } from '@/lib/report-brand'
 import type {
   ChecklistData,
   CriticalFinding,
   InspectionReport,
   PackageType,
   PhotoRef,
+  ReportBrand,
 } from '@/lib/report-types'
 
 const VALID_PACKAGES: PackageType[] = ['standard', 'comprehensive', 'premium']
 
-/** Create a fresh draft report for the chosen package and open its editor. */
-export async function createReport(packageType: PackageType): Promise<void> {
+/**
+ * Create a fresh draft report for the chosen package and open its editor.
+ *
+ * `brand` is whose document comes out (migration 022) and is fixed here, at
+ * creation — it is deliberately absent from the saveReport allowlist, so a
+ * report cannot change identity part-way through an inspection.
+ */
+export async function createReport(
+  packageType: PackageType,
+  brand: ReportBrand = 'crescent',
+): Promise<void> {
   if (!VALID_PACKAGES.includes(packageType)) throw new Error('Invalid package.')
+  if (!VALID_BRANDS.includes(brand)) throw new Error('Invalid brand.')
 
   if (IS_DEMO) {
     const { demoCreateReport } = await import('@/lib/demo')
-    const r = demoCreateReport(packageType)
+    const r = demoCreateReport(packageType, brand)
     revalidatePath('/reports')
     revalidatePath('/dashboard')
     redirect(`/reports/${r.id}/edit`)
@@ -52,6 +64,7 @@ export async function createReport(packageType: PackageType): Promise<void> {
       inspector_id: session.id,
       status: 'draft',
       package_type: packageType,
+      report_brand: brand,
       vehicle_make: '',
       vehicle_model: '',
       checklist,

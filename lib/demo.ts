@@ -2,6 +2,7 @@ import type {
   InspectionReport,
   InspectorProfile,
   PackageType,
+  ReportBrand,
   ChecklistData,
   ChecklistItemState,
 } from './report-types'
@@ -104,7 +105,7 @@ function renumberReports(map: Map<string, InspectionReport>): void {
   }
 }
 
-function base(pkg: PackageType, ref: string): InspectionReport {
+function base(pkg: PackageType, ref: string, brand: ReportBrand = 'crescent'): InspectionReport {
   const now = new Date().toISOString()
   return {
     id: uuid(),
@@ -136,6 +137,7 @@ function base(pkg: PackageType, ref: string): InspectionReport {
     inspector_summary: null,
     price_negotiation_notes: null,
     hide_branding: false,
+    report_brand: brand,
     checklist: {},
     critical_findings: [],
     photos: [],
@@ -449,10 +451,10 @@ export function demoGetReport(id: string): InspectionReport | null {
   return store().get(id) ?? null
 }
 
-export function demoCreateReport(pkg: PackageType): InspectionReport {
+export function demoCreateReport(pkg: PackageType, brand: ReportBrand = 'crescent'): InspectionReport {
   // Default-pass (brief item 4): seed every check Pass / panel Original.
   const checklist = seedDefaultChecklist(pkg)
-  const r = base(pkg, nextRef())
+  const r = base(pkg, nextRef(), brand)
   r.checklist = checklist
   r.counts = computeCounts(pkg, checklist)
   store().set(r.id, r)

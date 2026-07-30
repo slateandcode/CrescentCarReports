@@ -2,30 +2,31 @@
 
 import { useState } from 'react'
 import { Check, Star } from 'lucide-react'
-import { PACKAGE_LIST } from '@/lib/report-templates'
+import { REPORT_OPTIONS } from '@/lib/report-templates'
 import { createReport } from '@/app/(app)/reports/actions'
 import { Spinner } from '@/components/ui/Spinner'
 import { cn } from '@/lib/utils'
-import type { PackageType } from '@/lib/report-types'
 
 export function PackageSelector() {
-  const [pending, setPending] = useState<PackageType | null>(null)
+  // Keyed on the option key, not the package: Premium and Alpha are both the
+  // 'premium' package, and a shared key would spin both buttons at once.
+  const [pending, setPending] = useState<string | null>(null)
 
-  async function choose(pkg: PackageType) {
+  async function choose(option: (typeof REPORT_OPTIONS)[number]) {
     if (pending) return
-    setPending(pkg)
+    setPending(option.key)
     try {
-      await createReport(pkg)
+      await createReport(option.packageType, option.brand)
     } catch {
       setPending(null)
     }
   }
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      {PACKAGE_LIST.map((pkg) => (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {REPORT_OPTIONS.map((pkg) => (
         <div
-          key={pkg.id}
+          key={pkg.key}
           className={cn(
             'relative flex flex-col rounded-card-lg border bg-card p-5 transition-colors',
             pkg.popular ? 'border-accent/50' : 'border-border',
@@ -66,11 +67,11 @@ export function PackageSelector() {
           </ul>
 
           <button
-            onClick={() => choose(pkg.id)}
+            onClick={() => choose(pkg)}
             disabled={pending !== null}
             className={cn('mt-5 w-full', pkg.popular ? 'btn-primary' : 'btn-secondary')}
           >
-            {pending === pkg.id ? <Spinner /> : `Start ${pkg.name} report`}
+            {pending === pkg.key ? <Spinner /> : pkg.ctaLabel}
           </button>
         </div>
       ))}

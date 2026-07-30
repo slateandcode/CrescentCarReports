@@ -13,6 +13,10 @@
 export type PackageType = 'standard' | 'comprehensive' | 'premium'
 export type ReportStatus = 'draft' | 'completed' | 'archived'
 
+/** Whose document this is (migration 022). Independent of `package_type`:
+ *  an Alpha report is a Premium inspection wearing Alpha Worldwide's identity. */
+export type ReportBrand = 'crescent' | 'alpha'
+
 /** Canonical inspection statuses (brief: Pass / Minor Issue / Major Issue). */
 export type ChecklistStatus = 'pass' | 'minor' | 'major' | 'na'
 /** Statuses only present in legacy stored data. */
@@ -148,6 +152,10 @@ export interface InspectionReport {
   /** White-label switch (migration 021): true strips all Crescent Car Check
    *  identity from the customer-facing document. Default false = branded. */
   hide_branding: boolean
+  /** Brand identity worn by the document (migration 022). Default 'crescent'.
+   *  Read through `reportBrand()` in lib/report-brand.ts, which tolerates rows
+   *  written before the migration. */
+  report_brand: ReportBrand
 
   checklist: ChecklistData
   critical_findings: CriticalFinding[]

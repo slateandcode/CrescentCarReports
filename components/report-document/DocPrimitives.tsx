@@ -1,3 +1,4 @@
+import { Globe } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type {
   ChecklistStatus,
@@ -60,10 +61,16 @@ export function DocPage({
 }) {
   return (
     <div className={cn('report-page flex flex-col', className)}>
-      {/* brand-only: the crescent watermark disappears in white-label mode. */}
+      {/* brand-only: the crescent watermark disappears in white-label mode (and
+          in Alpha's, which brings its own mark below). */}
       {watermark && (
         <span className="brand-only pointer-events-none absolute -bottom-10 -right-10 block h-64 w-64 opacity-[0.035]">
           <DocImg src="/crescent-mark-tight.png" className="object-contain" />
+        </span>
+      )}
+      {watermark && (
+        <span className="alpha-only pointer-events-none absolute -bottom-8 -right-12 block h-60 w-60 opacity-[0.05]">
+          <DocImg src="/alpha-mark.png" className="object-contain" />
         </span>
       )}
       {children}
@@ -80,36 +87,96 @@ function Wordmark({ className }: { className?: string }) {
   )
 }
 
-/** Slim near-black running header: wordmark left, page label right, gold rule.
- *  In white-label mode (`.report-doc--unbranded`, see globals.css) the wordmark
- *  swaps for a neutral document title via the brand-only/unbranded-only classes —
- *  this component never receives the report, so the toggle rides on CSS. */
+/**
+ * Slim running header, one per brand.
+ *
+ * This component never receives the report — it is called from a dozen page
+ * components that only know their own label — so which variant shows rides on
+ * CSS classes set by the document root (see globals.css): `not-alpha` for the
+ * near-black Crescent bar (which also serves white-label, with the wordmark
+ * swapped for a neutral title), `alpha-only` for the Alpha Worldwide bar.
+ *
+ * Both variants are exactly the same height. lib/report-paginate.ts budgets
+ * page content against a fixed HEADER_MM, and .report-page clips at a hard
+ * 297mm, so a taller header would silently shear the bottom off dense pages.
+ * That budget — not the mockup — is why the Alpha lockup sits smaller here than
+ * on the cover, where there is room to give it.
+ */
 export function DocHeader({ label }: { label: string }) {
   return (
-    <div className="bg-doc-ink">
-      <div className="flex items-center justify-between px-12 pb-4 pt-5">
-        <Wordmark className="brand-only h-[26px] w-[132px]" />
-        <span className="unbranded-only text-[11px] font-bold uppercase tracking-[0.3em] text-white/85">
-          Vehicle Inspection Report
+    <>
+      <div className="not-alpha bg-doc-ink">
+        <div className="flex items-center justify-between px-12 pb-4 pt-5">
+          <Wordmark className="brand-only h-[26px] w-[132px]" />
+          <span className="unbranded-only text-[11px] font-bold uppercase tracking-[0.3em] text-white/85">
+            Vehicle Inspection Report
+          </span>
+          <span className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-white/55">
+            {label}
+            <span className="h-1 w-1 rounded-full bg-accent" />
+          </span>
+        </div>
+        <div className="h-[3px] w-full bg-gradient-to-r from-accent via-accent to-accent/0" />
+      </div>
+
+      <AlphaHeader label={label} />
+    </>
+  )
+}
+
+/** Alpha Worldwide running header: logo on the white end of a left-to-right
+ *  wash into their blue, page label riding the saturated end. */
+function AlphaHeader({ label }: { label: string }) {
+  return (
+    <div className="alpha-only">
+      <div
+        className="relative flex items-center justify-between overflow-hidden px-12 pb-1.5 pt-1"
+        style={{
+          background:
+            'linear-gradient(90deg, #ffffff 0%, #eef6fc 18%, #a8d7ef 42%, #3fb0e0 68%, #1f9ed4 100%)',
+        }}
+      >
+        {/* Their mark, ghosted into the blue end — the same quiet signature the
+            crescent watermark gives a Crescent page. */}
+        <span className="pointer-events-none absolute -top-6 right-16 block h-32 w-32 opacity-[0.14]">
+          <DocImg src="/alpha-mark.png" className="object-contain" />
         </span>
-        <span className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-white/55">
+        <span className="relative block h-[52px] w-[120px]">
+          <DocImg src="/alpha-worldwide.png" alt="Alpha Worldwide" className="object-contain object-left" />
+        </span>
+        <span className="relative flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.28em] text-white">
           {label}
-          <span className="h-1 w-1 rounded-full bg-accent" />
+          <span className="h-1 w-1 rounded-full bg-white" />
         </span>
       </div>
-      <div className="h-[3px] w-full bg-gradient-to-r from-accent via-accent to-accent/0" />
+      <div className="h-[3px] w-full" style={{ backgroundColor: ALPHA_NAVY }} />
     </div>
   )
 }
 
-/** Page footer. Brand line swaps for a neutral one in white-label mode (CSS
- *  class toggle — same reasoning as DocHeader). */
+/** Alpha Worldwide dark navy — the steady half of their two-blue palette. */
+export const ALPHA_NAVY = '#103659'
+
+/** Page footer. The brand line swaps by CSS class — same reasoning as DocHeader. */
 export function DocFooter({ reference, note }: { reference: string; note?: string }) {
   return (
     <div className="absolute inset-x-0 bottom-0 flex items-center justify-between border-t border-doc-border bg-white px-12 py-3 text-[10px] tracking-wide text-doc-muted">
       <span className="brand-only uppercase tracking-[0.18em]">Crescent Car Reports · by Crescent Car Check</span>
       <span className="unbranded-only uppercase tracking-[0.18em]">Vehicle Inspection Report</span>
-      <span className="tnum font-mono text-doc-ink/70">{note ? `${note} · ` : ''}{reference}</span>
+      {/* The visibility class must sit on its OWN element: `.alpha-only` toggles
+          with `display: revert`, which on a <span> means `inline` — it would
+          override an inline-flex on the same element and wrap the icon onto its
+          own line. So the outer span switches, the inner one lays out. */}
+      <span className="alpha-only">
+        <span className="inline-flex items-center gap-1.5 whitespace-nowrap normal-case tracking-normal text-doc-ink/70">
+          <Globe size={11} className="text-accent" />
+          https://alphaworldwide.me/
+        </span>
+      </span>
+      <span className="tnum font-mono text-doc-ink/70">
+        {note ? `${note} · ` : ''}
+        <span className="doc-ref">{reference}</span>
+      </span>
     </div>
   )
 }

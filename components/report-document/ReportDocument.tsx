@@ -1,7 +1,9 @@
 import type { InspectionReport } from '@/lib/report-types'
 import { getTemplate } from '@/lib/report-templates'
+import { brandConfig, reportBrand } from '@/lib/report-brand'
 import {
   ReportCoverPage,
+  ReportAlphaCoverPage,
   ReportVehicleSummaryPage,
   ReportExecutiveSummaryPage,
   ReportAccidentHistoryPage,
@@ -29,6 +31,10 @@ export function ReportDocument({
   inspectorName?: string | null
 }) {
   const template = getTemplate(report.package_type)
+  // Whose document this is. White-label (hide_branding) still wins over a brand:
+  // "show no identity" is a stronger instruction than "show theirs".
+  const brand = report.hide_branding ? 'crescent' : reportBrand(report)
+  const { disclaimerPage } = report.hide_branding ? { disclaimerPage: true } : brandConfig(report)
   const present = new Set(template.sections.map((s) => s.id))
   const hasNotes = Boolean(report.inspector_summary || report.price_negotiation_notes)
   const showFinalNotes = template.recommendationEnabled || hasNotes
@@ -73,16 +79,23 @@ export function ReportDocument({
     )
   if (showFinalNotes)
     pages.push(<ReportFinalNotesPage key="notes" report={report} template={template} index={next()} />)
-  pages.push(<ReportDisclaimerPage key="disclaimer" report={report} index={next()} />)
+  // Alpha asked for the legal disclaimer dropped: the text names the inspection
+  // provider throughout and their legal position is theirs to state.
+  if (disclaimerPage) pages.push(<ReportDisclaimerPage key="disclaimer" report={report} index={next()} />)
 
   return (
-    // White-label mode: the modifier class drives the CSS-side brand swaps in the
-    // shared chrome (DocHeader/DocFooter/watermark — see globals.css); pages that
-    // hold the report branch in JSX on report.hide_branding themselves.
+    // Brand + white-label modifiers drive the CSS-side swaps in the shared chrome
+    // (DocHeader/DocFooter/watermark — see globals.css), including re-pointing
+    // --accent-rgb for the whole document. Pages that hold the report branch in
+    // JSX themselves.
     <div
-      className={`report-doc bg-[#3A3A3A] print:bg-white${report.hide_branding ? ' report-doc--unbranded' : ''}`}
+      className={`report-doc bg-[#3A3A3A] print:bg-white${report.hide_branding ? ' report-doc--unbranded' : ''}${brand === 'alpha' ? ' report-doc--alpha' : ''}`}
     >
-      <ReportCoverPage report={report} template={template} />
+      {brand === 'alpha' ? (
+        <ReportAlphaCoverPage />
+      ) : (
+        <ReportCoverPage report={report} template={template} />
+      )}
       {pages}
     </div>
   )
