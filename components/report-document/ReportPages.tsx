@@ -26,7 +26,7 @@ import type {
 } from '@/lib/report-types'
 import type { ResolvedTemplate, SectionDef } from '@/lib/report-templates'
 import { getTemplate } from '@/lib/report-templates'
-import { brandConfig } from '@/lib/report-brand'
+import { brandConfig, reportBrand } from '@/lib/report-brand'
 import {
   computeCounts,
   sectionCounts,
@@ -82,6 +82,7 @@ import {
   paginatePhotos,
   paginateNotes,
   splitChunk,
+  headerExtraMm,
   SECTION_CONT_MM,
   type SectionBlock,
 } from '@/lib/report-paginate'
@@ -506,9 +507,39 @@ export function ReportAlphaCoverPage() {
           Box is the image's own 1.43 aspect so object-contain adds no
           letterboxing, and it is painted before the headline so "YOU INVEST."
           crosses over it, as in the artwork. Geometry (left edge at 45% of the
-          sheet, 43% of sheet height) is measured off the supplied cover. */}
-      <div className="absolute right-[-254px] top-[359px] h-[483px] w-[691px]">
-        <DocImg src="/cover-car.png" className="object-contain" />
+          sheet, 43% of sheet height) is measured off the supplied cover.
+
+          Two passes, the same dissolve the Crescent cover uses — a hard-edged
+          cutout dropped on the page reads as clip-art. A blurred ghost gives the
+          silhouette something to melt into, the sharp pass is masked tighter so
+          only the core stays crisp, and the wrapper mask fades the whole element
+          out toward its edges. No brightness/contrast filters here: the car is
+          already near-black and the field is white, so it needs softening, not
+          darkening. */}
+      <div
+        className="absolute right-[-254px] top-[359px] h-[483px] w-[691px]"
+        style={{
+          WebkitMaskImage:
+            'radial-gradient(82% 80% at 52% 50%, #000 64%, rgba(0,0,0,0.85) 79%, rgba(0,0,0,0.35) 92%, transparent 100%)',
+          maskImage:
+            'radial-gradient(82% 80% at 52% 50%, #000 64%, rgba(0,0,0,0.85) 79%, rgba(0,0,0,0.35) 92%, transparent 100%)',
+        }}
+      >
+        <DocImg
+          src="/cover-car.png"
+          className="object-contain"
+          style={{ filter: 'blur(6px)', opacity: 0.4 }}
+        />
+        <DocImg
+          src="/cover-car.png"
+          className="object-contain"
+          style={{
+            WebkitMaskImage:
+              'radial-gradient(80% 76% at 52% 50%, #000 58%, rgba(0,0,0,0.7) 77%, transparent 95%)',
+            maskImage:
+              'radial-gradient(80% 76% at 52% 50%, #000 58%, rgba(0,0,0,0.7) 77%, transparent 95%)',
+          }}
+        />
       </div>
 
       <div className="relative px-14 pt-[56px]">
@@ -866,7 +897,9 @@ export function ScoredSectionPage({
     )
   }
 
-  const chunks = paginateSectionBlocks(buildSectionBlocks({ issues, passEvidence, passes }))
+  const chunks = paginateSectionBlocks(buildSectionBlocks({ issues, passEvidence, passes }), {
+    headerExtraMm: headerExtraMm(reportBrand(report)),
+  })
   return chunks.map((chunk, ci) => (
     <DocPage key={ci}>
       <DocHeader label={section.title} />
@@ -907,7 +940,10 @@ export function ReportAccidentHistoryPage({ report, index }: { report: Inspectio
 
   // leadMm reserves first-page space for the "Important" notice, which only shows
   // on page 1 (continuation pages skip it).
-  const chunks = paginateSectionBlocks(buildSectionBlocks({ issues, passEvidence, passes }), { leadMm: 26 })
+  const chunks = paginateSectionBlocks(buildSectionBlocks({ issues, passEvidence, passes }), {
+    leadMm: 26,
+    headerExtraMm: headerExtraMm(reportBrand(report)),
+  })
   return chunks.map((chunk, ci) => (
     <DocPage key={ci}>
       <DocHeader label="Accident History" />
@@ -983,7 +1019,10 @@ export function ReportExteriorPage({ report, index }: { report: InspectionReport
   // generous — it reserves the full-width paint map AND the narrower col-span-3
   // issue column — so blocks never clip (at worst an extra, lightly-filled page).
   const exteriorBlocks = buildSectionBlocks({ issues, passEvidence, passes })
-  const [firstChunk = [], ...contChunks] = paginateSectionBlocks(exteriorBlocks, { leadMm: 110 })
+  const [firstChunk = [], ...contChunks] = paginateSectionBlocks(exteriorBlocks, {
+    leadMm: 110,
+    headerExtraMm: headerExtraMm(reportBrand(report)),
+  })
   const firstCol = splitChunk(firstChunk)
 
   return (
@@ -1152,7 +1191,11 @@ export function ReportTyresBrakesPage({ report, index }: { report: InspectionRep
     state: state[it.id] as ChecklistItemState,
   }))
   const brakeChunks =
-    brakeBlocks.length > 0 ? paginateSectionBlocks(brakeBlocks, { leadMm: cornerBlockMm + 10 }) : [[]]
+    brakeBlocks.length > 0 ? paginateSectionBlocks(brakeBlocks, {
+          leadMm: cornerBlockMm + 10,
+          headerExtraMm: headerExtraMm(reportBrand(report)),
+        })
+      : [[]]
   const firstBrakes = splitChunk(brakeChunks[0]).evidence
   const contChunks = brakeChunks.slice(1)
   // If the corner grid leaves no room at all, push every brake to the continuation.
@@ -1284,7 +1327,10 @@ export function ReportEndoscopicPage({ report, index }: { report: InspectionRepo
     title: it.title,
     state: state[it.id] as ChecklistItemState,
   }))
-  const chunks = paginateSectionBlocks(blocks, { firstMm: SECTION_CONT_MM })
+  const chunks = paginateSectionBlocks(blocks, {
+    firstMm: SECTION_CONT_MM,
+    headerExtraMm: headerExtraMm(reportBrand(report)),
+  })
   return chunks.map((chunk, ci) => (
     <DocPage key={ci}>
       <DocHeader label="Endoscopic Evidence" />
@@ -1330,7 +1376,7 @@ export function ReportPhotoGalleryPage({
     )
   }
 
-  const chunks = paginatePhotos(photos)
+  const chunks = paginatePhotos(photos, { headerExtraMm: headerExtraMm(reportBrand(report)) })
   return chunks.map((chunk, ci) => (
     <DocPage key={ci}>
       <DocHeader label="Photo Gallery" />
@@ -1417,6 +1463,7 @@ export function ReportFinalNotesPage({
     firstMm: SECTION_CONT_MM - (showRec ? 34 : 0),
     contMm: SECTION_CONT_MM,
     issuedMm: 30,
+    headerExtraMm: headerExtraMm(reportBrand(report)),
   })
 
   return pages.map((page, pi) => (

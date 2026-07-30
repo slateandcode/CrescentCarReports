@@ -96,11 +96,13 @@ function Wordmark({ className }: { className?: string }) {
  * near-black Crescent bar (which also serves white-label, with the wordmark
  * swapped for a neutral title), `alpha-only` for the Alpha Worldwide bar.
  *
- * Both variants are exactly the same height. lib/report-paginate.ts budgets
- * page content against a fixed HEADER_MM, and .report-page clips at a hard
- * 297mm, so a taller header would silently shear the bottom off dense pages.
- * That budget — not the mockup — is why the Alpha lockup sits smaller here than
- * on the cover, where there is room to give it.
+ * The two variants are NOT the same height: Alpha's stacked chevron-over-
+ * wordmark lockup is illegible squeezed into Crescent's 16mm band, so their
+ * band is ~30mm, per the artwork. That difference is paid for in the pagination
+ * budget (ALPHA_HEADER_EXTRA_MM in lib/report-paginate.ts) — the sheet is a
+ * fixed 297mm that clips, so the content budget has to shrink by exactly what
+ * the header grows, or dense pages shear instead of flowing to a
+ * "(continued)" page.
  */
 export function DocHeader({ label }: { label: string }) {
   return (
@@ -130,7 +132,7 @@ function AlphaHeader({ label }: { label: string }) {
   return (
     <div className="alpha-only">
       <div
-        className="relative flex items-center justify-between overflow-hidden px-12 pb-1.5 pt-1"
+        className="relative flex items-center justify-between overflow-hidden px-12 pb-[16px] pt-[16px]"
         style={{
           background:
             'linear-gradient(90deg, #ffffff 0%, #eef6fc 18%, #a8d7ef 42%, #3fb0e0 68%, #1f9ed4 100%)',
@@ -138,10 +140,10 @@ function AlphaHeader({ label }: { label: string }) {
       >
         {/* Their mark, ghosted into the blue end — the same quiet signature the
             crescent watermark gives a Crescent page. */}
-        <span className="pointer-events-none absolute -top-6 right-16 block h-32 w-32 opacity-[0.14]">
-          <DocImg src="/alpha-mark.png" className="object-contain" />
+        <span className="pointer-events-none absolute -top-8 right-20 block h-44 w-28 opacity-[0.14]">
+          <DocImg src="/alpha-mark.png" />
         </span>
-        <span className="relative block h-[52px] w-[120px]">
+        <span className="relative block h-[73px] w-[168px]">
           <DocImg src="/alpha-worldwide.png" alt="Alpha Worldwide" className="object-contain object-left" />
         </span>
         <span className="relative flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.28em] text-white">
