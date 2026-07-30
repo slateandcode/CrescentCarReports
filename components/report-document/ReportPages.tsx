@@ -26,6 +26,7 @@ import type {
 } from '@/lib/report-types'
 import type { ResolvedTemplate, SectionDef } from '@/lib/report-templates'
 import { getTemplate } from '@/lib/report-templates'
+import { brandConfig, reportBrand } from '@/lib/report-brand'
 import {
   computeCounts,
   sectionCounts,
@@ -64,6 +65,7 @@ import {
   DocStatusBadge,
   RecommendationBadge,
   DocImg,
+  ALPHA_NAVY,
 } from './DocPrimitives'
 import { HealthGauge } from './ReportDonutChart'
 import {
@@ -80,6 +82,7 @@ import {
   paginatePhotos,
   paginateNotes,
   splitChunk,
+  headerExtraMm,
   SECTION_CONT_MM,
   type SectionBlock,
 } from '@/lib/report-paginate'
@@ -472,6 +475,112 @@ export function ReportCoverPage({ report, template }: { report: InspectionReport
   )
 }
 
+// ════════════════════════════════════════════════════════════════════════
+// Page 1: Cover — Alpha Worldwide
+// ════════════════════════════════════════════════════════════════════════
+/**
+ * Alpha Worldwide's cover, reproduced from the artwork they supplied.
+ *
+ * Deliberately takes no report: the brief is "use this as the first page
+ * regardless of what car it is". So unlike the Crescent cover — which carries
+ * the vehicle line, the customer name and a stat card of package/date/
+ * reference/score — this one is a fixed poster. Every one of those facts still
+ * reaches the reader on the Vehicle Summary page that follows, and the
+ * reference rides the footer of every subsequent page.
+ */
+export function ReportAlphaCoverPage() {
+  return (
+    <DocPage className="overflow-hidden">
+      {/* Full-bleed rule in their light blue — the cover's one horizontal edge. */}
+      <div className="absolute inset-x-0 top-0 h-[7px] bg-accent" />
+
+      {/* Their mark, ghosted behind the top-right corner. Deliberately NOT
+          object-contain: the supplied cover stretches the chevron tall and
+          narrow (142 × 247 on the sheet), and letting it fill the box
+          reproduces that rather than snapping back to the square asset. */}
+      <span className="pointer-events-none absolute right-[40px] top-[56px] block h-[247px] w-[142px] opacity-[0.07]">
+        <DocImg src="/alpha-mark.png" />
+      </span>
+
+      {/* The car runs well off the right edge — the artwork frames it from the
+          left headlight across, with roughly a third of the body past the trim.
+          Box is the image's own 1.43 aspect so object-contain adds no
+          letterboxing, and it is painted before the headline so "YOU INVEST."
+          crosses over it, as in the artwork. Geometry (left edge at 45% of the
+          sheet, 43% of sheet height) is measured off the supplied cover.
+
+          Two passes, the same dissolve the Crescent cover uses — a hard-edged
+          cutout dropped on the page reads as clip-art. A blurred ghost gives the
+          silhouette something to melt into, the sharp pass is masked tighter so
+          only the core stays crisp, and the wrapper mask fades the whole element
+          out toward its edges. No brightness/contrast filters here: the car is
+          already near-black and the field is white, so it needs softening, not
+          darkening. */}
+      <div
+        className="absolute right-[-254px] top-[359px] h-[483px] w-[691px]"
+        style={{
+          WebkitMaskImage:
+            'radial-gradient(82% 80% at 52% 50%, #000 64%, rgba(0,0,0,0.85) 79%, rgba(0,0,0,0.35) 92%, transparent 100%)',
+          maskImage:
+            'radial-gradient(82% 80% at 52% 50%, #000 64%, rgba(0,0,0,0.85) 79%, rgba(0,0,0,0.35) 92%, transparent 100%)',
+        }}
+      >
+        <DocImg
+          src="/cover-car.png"
+          className="object-contain"
+          style={{ filter: 'blur(6px)', opacity: 0.4 }}
+        />
+        <DocImg
+          src="/cover-car.png"
+          className="object-contain"
+          style={{
+            WebkitMaskImage:
+              'radial-gradient(80% 76% at 52% 50%, #000 58%, rgba(0,0,0,0.7) 77%, transparent 95%)',
+            maskImage:
+              'radial-gradient(80% 76% at 52% 50%, #000 58%, rgba(0,0,0,0.7) 77%, transparent 95%)',
+          }}
+        />
+      </div>
+
+      <div className="relative px-14 pt-[56px]">
+        <span className="relative block h-[132px] w-[304px]">
+          <DocImg src="/alpha-worldwide.png" alt="Alpha Worldwide" className="object-contain object-left" />
+        </span>
+      </div>
+
+      <div className="relative mt-[171px] px-14">
+        <div className="h-[4px] w-12 rounded-full bg-accent" />
+        <p
+          className="mt-8 text-[12px] font-bold uppercase tracking-[0.34em]"
+          style={{ color: ALPHA_NAVY }}
+        >
+          Vehicle Inspection Report
+        </p>
+        <h1 className="mt-5 text-[62px] font-black italic uppercase leading-[1.1] tracking-tight text-doc-ink">
+          <span className="block">Inspect</span>
+          <span className="block text-accent">Before</span>
+          <span className="block">You Invest.</span>
+        </h1>
+        <p className="mt-7 text-[14px] font-medium text-doc-muted">
+          Buy With Confidence and Avoid Hidden Surprises!
+        </p>
+        <div className="mt-9 h-[4px] w-12 rounded-full bg-accent" />
+      </div>
+
+      <div className="relative mt-auto flex items-center justify-between border-t border-doc-border px-14 py-7 text-[13.5px]">
+        <span className="flex items-center gap-2.5 font-medium text-doc-ink">
+          <Globe size={16} className="text-accent" />
+          alphaworldwide.me
+        </span>
+        <p className="font-medium text-doc-ink">
+          Driven by <span className="text-accent">Trust</span>. Backed by{' '}
+          <span className="text-accent">Detail</span>.
+        </p>
+      </div>
+    </DocPage>
+  )
+}
+
 /** Gold arc that fills to the actual score — every cover's gauge is its own. */
 function ScoreRing({ score }: { score: number }) {
   const r = 15.5
@@ -647,8 +756,10 @@ export function ReportExecutiveSummaryPage({
   const rec = normalizeRecommendation(report.buyer_recommendation) ?? recommendationFromScore(score)
   const cards = sectionScores(report.package_type, checklist)
   const majorFindings = deriveAutoFindings(report.package_type, checklist)
-  // White-label: the score keeps its meaning but loses the brand's name for it.
-  const scoreName = report.hide_branding ? 'Overall Score' : 'Crescent Score'
+  // The score keeps its meaning but takes the name of whoever's document this
+  // is — "Crescent Score" on a Crescent report, plain "Overall Score" on an
+  // Alpha one or in white-label mode (which still wins over any brand).
+  const scoreName = report.hide_branding ? 'Overall Score' : brandConfig(report).scoreName
 
   return (
     <DocPage>
@@ -786,7 +897,9 @@ export function ScoredSectionPage({
     )
   }
 
-  const chunks = paginateSectionBlocks(buildSectionBlocks({ issues, passEvidence, passes }))
+  const chunks = paginateSectionBlocks(buildSectionBlocks({ issues, passEvidence, passes }), {
+    headerExtraMm: headerExtraMm(reportBrand(report)),
+  })
   return chunks.map((chunk, ci) => (
     <DocPage key={ci}>
       <DocHeader label={section.title} />
@@ -827,7 +940,10 @@ export function ReportAccidentHistoryPage({ report, index }: { report: Inspectio
 
   // leadMm reserves first-page space for the "Important" notice, which only shows
   // on page 1 (continuation pages skip it).
-  const chunks = paginateSectionBlocks(buildSectionBlocks({ issues, passEvidence, passes }), { leadMm: 26 })
+  const chunks = paginateSectionBlocks(buildSectionBlocks({ issues, passEvidence, passes }), {
+    leadMm: 26,
+    headerExtraMm: headerExtraMm(reportBrand(report)),
+  })
   return chunks.map((chunk, ci) => (
     <DocPage key={ci}>
       <DocHeader label="Accident History" />
@@ -903,7 +1019,10 @@ export function ReportExteriorPage({ report, index }: { report: InspectionReport
   // generous — it reserves the full-width paint map AND the narrower col-span-3
   // issue column — so blocks never clip (at worst an extra, lightly-filled page).
   const exteriorBlocks = buildSectionBlocks({ issues, passEvidence, passes })
-  const [firstChunk = [], ...contChunks] = paginateSectionBlocks(exteriorBlocks, { leadMm: 110 })
+  const [firstChunk = [], ...contChunks] = paginateSectionBlocks(exteriorBlocks, {
+    leadMm: 110,
+    headerExtraMm: headerExtraMm(reportBrand(report)),
+  })
   const firstCol = splitChunk(firstChunk)
 
   return (
@@ -1072,7 +1191,11 @@ export function ReportTyresBrakesPage({ report, index }: { report: InspectionRep
     state: state[it.id] as ChecklistItemState,
   }))
   const brakeChunks =
-    brakeBlocks.length > 0 ? paginateSectionBlocks(brakeBlocks, { leadMm: cornerBlockMm + 10 }) : [[]]
+    brakeBlocks.length > 0 ? paginateSectionBlocks(brakeBlocks, {
+          leadMm: cornerBlockMm + 10,
+          headerExtraMm: headerExtraMm(reportBrand(report)),
+        })
+      : [[]]
   const firstBrakes = splitChunk(brakeChunks[0]).evidence
   const contChunks = brakeChunks.slice(1)
   // If the corner grid leaves no room at all, push every brake to the continuation.
@@ -1204,7 +1327,10 @@ export function ReportEndoscopicPage({ report, index }: { report: InspectionRepo
     title: it.title,
     state: state[it.id] as ChecklistItemState,
   }))
-  const chunks = paginateSectionBlocks(blocks, { firstMm: SECTION_CONT_MM })
+  const chunks = paginateSectionBlocks(blocks, {
+    firstMm: SECTION_CONT_MM,
+    headerExtraMm: headerExtraMm(reportBrand(report)),
+  })
   return chunks.map((chunk, ci) => (
     <DocPage key={ci}>
       <DocHeader label="Endoscopic Evidence" />
@@ -1250,7 +1376,7 @@ export function ReportPhotoGalleryPage({
     )
   }
 
-  const chunks = paginatePhotos(photos)
+  const chunks = paginatePhotos(photos, { headerExtraMm: headerExtraMm(reportBrand(report)) })
   return chunks.map((chunk, ci) => (
     <DocPage key={ci}>
       <DocHeader label="Photo Gallery" />
@@ -1322,7 +1448,7 @@ export function ReportFinalNotesPage({
           ? `Report issued on ${completed}.`
           : report.hide_branding
             ? 'Report prepared by your inspection team.'
-            : 'Report prepared by Crescent Car Check.'}
+            : `Report prepared by ${brandConfig(report).name}.`}
       </div>
       <p className="mt-1.5 text-[11px] text-doc-muted">
         Reference {report.report_reference} · {template.name} · {template.pointLabel}
@@ -1337,6 +1463,7 @@ export function ReportFinalNotesPage({
     firstMm: SECTION_CONT_MM - (showRec ? 34 : 0),
     contMm: SECTION_CONT_MM,
     issuedMm: 30,
+    headerExtraMm: headerExtraMm(reportBrand(report)),
   })
 
   return pages.map((page, pi) => (

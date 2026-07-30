@@ -33,7 +33,13 @@ const config: Config = {
         'card-hover': 'var(--color-card-hover)',
         border: 'var(--color-border)',
         'border-hover': 'var(--color-border-hover)',
-        accent: '#FFC600',
+        // Gold everywhere by default (--accent-rgb in globals.css). Resolved
+        // through a variable, in channel form so Tailwind's opacity modifiers
+        // (bg-accent/15, via-accent/50, …) still work, because the printable
+        // document re-points it per brand: an Alpha Worldwide report scopes
+        // --accent-rgb to their blue on the document root, and every accent
+        // utility inside follows without the page components knowing.
+        accent: 'rgb(var(--accent-rgb) / <alpha-value>)',
         'accent-hover': '#E6B200',
         'accent-muted': 'rgba(255,198,0,0.08)',
         'text-primary': 'var(--color-text-primary)',

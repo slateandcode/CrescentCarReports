@@ -1,3 +1,4 @@
+import { Globe } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type {
   ChecklistStatus,
@@ -60,10 +61,16 @@ export function DocPage({
 }) {
   return (
     <div className={cn('report-page flex flex-col', className)}>
-      {/* brand-only: the crescent watermark disappears in white-label mode. */}
+      {/* brand-only: the crescent watermark disappears in white-label mode (and
+          in Alpha's, which brings its own mark below). */}
       {watermark && (
         <span className="brand-only pointer-events-none absolute -bottom-10 -right-10 block h-64 w-64 opacity-[0.035]">
           <DocImg src="/crescent-mark-tight.png" className="object-contain" />
+        </span>
+      )}
+      {watermark && (
+        <span className="alpha-only pointer-events-none absolute -bottom-8 -right-12 block h-60 w-60 opacity-[0.05]">
+          <DocImg src="/alpha-mark.png" className="object-contain" />
         </span>
       )}
       {children}
@@ -80,36 +87,121 @@ function Wordmark({ className }: { className?: string }) {
   )
 }
 
-/** Slim near-black running header: wordmark left, page label right, gold rule.
- *  In white-label mode (`.report-doc--unbranded`, see globals.css) the wordmark
- *  swaps for a neutral document title via the brand-only/unbranded-only classes —
- *  this component never receives the report, so the toggle rides on CSS. */
+/**
+ * Slim running header, one per brand.
+ *
+ * This component never receives the report — it is called from a dozen page
+ * components that only know their own label — so which variant shows rides on
+ * CSS classes set by the document root (see globals.css): `not-alpha` for the
+ * near-black Crescent bar (which also serves white-label, with the wordmark
+ * swapped for a neutral title), `alpha-only` for the Alpha Worldwide bar.
+ *
+ * The two variants are NOT the same height: Alpha's stacked chevron-over-
+ * wordmark lockup is illegible squeezed into Crescent's 16mm band, so their
+ * band is ~30mm, per the artwork. That difference is paid for in the pagination
+ * budget (ALPHA_HEADER_EXTRA_MM in lib/report-paginate.ts) — the sheet is a
+ * fixed 297mm that clips, so the content budget has to shrink by exactly what
+ * the header grows, or dense pages shear instead of flowing to a
+ * "(continued)" page.
+ */
 export function DocHeader({ label }: { label: string }) {
   return (
-    <div className="bg-doc-ink">
-      <div className="flex items-center justify-between px-12 pb-4 pt-5">
-        <Wordmark className="brand-only h-[26px] w-[132px]" />
-        <span className="unbranded-only text-[11px] font-bold uppercase tracking-[0.3em] text-white/85">
-          Vehicle Inspection Report
+    <>
+      <div className="not-alpha bg-doc-ink">
+        <div className="flex items-center justify-between px-12 pb-4 pt-5">
+          <Wordmark className="brand-only h-[26px] w-[132px]" />
+          <span className="unbranded-only text-[11px] font-bold uppercase tracking-[0.3em] text-white/85">
+            Vehicle Inspection Report
+          </span>
+          <span className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-white/55">
+            {label}
+            <span className="h-1 w-1 rounded-full bg-accent" />
+          </span>
+        </div>
+        <div className="h-[3px] w-full bg-gradient-to-r from-accent via-accent to-accent/0" />
+      </div>
+
+      <AlphaHeader label={label} />
+    </>
+  )
+}
+
+/**
+ * Alpha Worldwide running header: logo on the white end of a left-to-right wash
+ * into their blue, page label riding the saturated end.
+ *
+ * Every number here is measured off the artwork they supplied: a 116px band
+ * (30.7mm), an 82px lockup (21.6mm) sitting 16px down, and a gradient that runs
+ * all the way to a deep royal #075ca6 rather than stopping at their light blue.
+ *
+ * `-mb-3` is the trick that lets the band be that tall. It pulls the following
+ * content wrapper up 12px, so the band COSTS 104px of layout while PAINTING
+ * 116px — the overlap falls entirely inside that wrapper's empty pt-9 padding,
+ * so nothing is covered. Without it the taller band pushed the hand-laid
+ * Exterior page (whose lead cannot reflow) past the 297mm sheet, and .report-page
+ * clips rather than growing.
+ */
+function AlphaHeader({ label }: { label: string }) {
+  return (
+    <div className="alpha-only -mb-3">
+      <div
+        className="relative flex items-center justify-between overflow-hidden px-12 pb-[14px] pt-[16px]"
+        style={{
+          background:
+            'linear-gradient(90deg, #ffffff 6%, #f0f6fb 20%, #dbeaf8 30%, #c0dbf6 40%, #98c5f0 50%, #6faeec 60%, #4495e6 70%, #2380df 80%, #0c70d4 90%, #075ca6 100%)',
+        }}
+      >
+        {/* Their mark, ghosted into the blue end — the same quiet signature the
+            crescent watermark gives a Crescent page. */}
+        <span className="pointer-events-none absolute -top-10 right-20 block h-48 w-28 opacity-[0.13]">
+          <DocImg src="/alpha-mark.png" />
         </span>
-        <span className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-white/55">
+        <span className="relative block h-[82px] w-[192px]">
+          <DocImg src="/alpha-worldwide.png" alt="Alpha Worldwide" className="object-contain object-left" />
+        </span>
+        <span className="relative flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.28em] text-white">
           {label}
-          <span className="h-1 w-1 rounded-full bg-accent" />
+          <span className="h-1 w-1 rounded-full bg-white" />
         </span>
       </div>
-      <div className="h-[3px] w-full bg-gradient-to-r from-accent via-accent to-accent/0" />
+      {/* The rule is a gradient too — navy under the logo, brightening with the
+          band above it. */}
+      <div
+        className="h-[4px] w-full"
+        style={{ background: `linear-gradient(90deg, ${ALPHA_NAVY} 0%, #0e60b6 40%, #2c8ae6 80%, #1e7ac9 100%)` }}
+      />
     </div>
   )
 }
 
-/** Page footer. Brand line swaps for a neutral one in white-label mode (CSS
- *  class toggle — same reasoning as DocHeader). */
+/** Alpha Worldwide dark navy — the steady half of their two-blue palette. */
+export const ALPHA_NAVY = '#103659'
+
+/** Page footer. The brand line swaps by CSS class — same reasoning as DocHeader. */
 export function DocFooter({ reference, note }: { reference: string; note?: string }) {
   return (
     <div className="absolute inset-x-0 bottom-0 flex items-center justify-between border-t border-doc-border bg-white px-12 py-3 text-[10px] tracking-wide text-doc-muted">
       <span className="brand-only uppercase tracking-[0.18em]">Crescent Car Reports · by Crescent Car Check</span>
       <span className="unbranded-only uppercase tracking-[0.18em]">Vehicle Inspection Report</span>
-      <span className="tnum font-mono text-doc-ink/70">{note ? `${note} · ` : ''}{reference}</span>
+      {/* The visibility class must sit on its OWN element: `.alpha-only` toggles
+          with `display: revert`, which on a <span> means `inline` — it would
+          override an inline-flex on the same element and wrap the icon onto its
+          own line. So the outer span switches, the inner one lays out. */}
+      <span className="alpha-only">
+        <span className="inline-flex items-center gap-1.5 whitespace-nowrap normal-case tracking-normal text-doc-ink/70">
+          <Globe size={11} className="text-accent" />
+          https://alphaworldwide.me/
+        </span>
+      </span>
+      {/* Crescent prints the page name and the report reference. Alpha drops the
+          reference: "CCR" is Crescent Car Reports, so the code is brand leakage
+          on their document however neutral the rest of the page is. The report
+          is still identified by the Reference row on the Vehicle Summary page. */}
+      <span className="not-alpha tnum font-mono text-doc-ink/70">
+        {note ? `${note} · ` : ''}
+        {reference}
+      </span>
+      <span className="alpha-only text-doc-ink/70">{note}</span>
     </div>
   )
 }

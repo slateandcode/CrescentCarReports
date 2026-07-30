@@ -1,4 +1,4 @@
-import type { ChecklistItemState, PhotoRef } from './report-types'
+import type { ChecklistItemState, PhotoRef, ReportBrand } from './report-types'
 import { itemComment, itemNote } from './report-utils'
 
 /**
@@ -38,6 +38,29 @@ export const SECTION_CONT_MM = PAGE_MM - HEADER_MM - FOOTER_MM - PAD_MM - TITLE_
 /** Photo-gallery pages have no score header, so the first page gets the cont budget. */
 export const GALLERY_FIRST_MM = SECTION_CONT_MM
 export const GALLERY_CONT_MM = SECTION_CONT_MM
+
+/**
+ * Alpha Worldwide's running header is a taller band than Crescent's — their
+ * lockup is a stacked chevron-over-wordmark that is unreadable squeezed into
+ * 16mm, so the brand band is ~30mm (measured off the artwork they supplied).
+ *
+ * That height comes straight out of every page's content budget, which is why
+ * it is a pagination constant and not just a CSS number: the sheet is a FIXED
+ * 297mm that clips, so a header that grew without the budget shrinking would
+ * silently shear the bottom off dense pages instead of flowing them onto a
+ * "(continued)" page. Pass it via `headerExtraMm` on the paginate calls.
+ *
+ * Deliberately a shade above the real growth (the band renders ~28.6mm against
+ * Crescent's ~17.2mm, so ~11.4mm): per the calibration note above, budgets are
+ * meant to sit under reality, where the cost of erring is a lightly-filled
+ * extra page rather than clipped content.
+ */
+export const ALPHA_HEADER_EXTRA_MM = 14
+
+/** Extra header height this brand's band eats from each page's content budget. */
+export function headerExtraMm(brand: ReportBrand): number {
+  return brand === 'alpha' ? ALPHA_HEADER_EXTRA_MM : 0
+}
 
 /** A "Checks passed" list reopens its bordered header each page it appears on. */
 const PASSLIST_HEADER_MM = 12
@@ -112,16 +135,19 @@ export function blockMm(b: SectionBlock): number {
 // ─── Greedy packers ─────────────────────────────────────────────────────────
 /**
  * Pack section blocks into page-sized chunks. `leadMm` is fixed first-page
- * content (e.g. an info callout) that eats into the first page's budget. A single
- * block taller than a whole page still gets its own page (the fixed-height clip is
- * the final safety net for that rare case).
+ * content (e.g. an info callout) that eats into the first page's budget.
+ * `headerExtraMm` is the brand's taller running header (see headerExtraMm()),
+ * which eats into EVERY page's budget. A single block taller than a whole page
+ * still gets its own page (the fixed-height clip is the final safety net for
+ * that rare case).
  */
 export function paginateSectionBlocks(
   blocks: SectionBlock[],
-  opts: { firstMm?: number; contMm?: number; leadMm?: number } = {},
+  opts: { firstMm?: number; contMm?: number; leadMm?: number; headerExtraMm?: number } = {},
 ): SectionBlock[][] {
-  const firstMm = (opts.firstMm ?? SECTION_FIRST_MM) - (opts.leadMm ?? 0)
-  const contMm = opts.contMm ?? SECTION_CONT_MM
+  const extra = opts.headerExtraMm ?? 0
+  const firstMm = (opts.firstMm ?? SECTION_FIRST_MM) - (opts.leadMm ?? 0) - extra
+  const contMm = (opts.contMm ?? SECTION_CONT_MM) - extra
   const chunks: SectionBlock[][] = []
   let cur: SectionBlock[] = []
   let remaining = firstMm
@@ -162,8 +188,9 @@ export interface NotePage {
  */
 export function paginateNotes(
   notes: { title: string; body: string }[],
-  opts: { firstMm: number; contMm: number; issuedMm: number },
+  opts: { firstMm: number; contMm: number; issuedMm: number; headerExtraMm?: number },
 ): NotePage[] {
+  const extra = opts.headerExtraMm ?? 0
   const ISSUED = -2
   type B = { note: number; title?: string; text: string; mm: number }
   const blocks: B[] = []
@@ -178,12 +205,12 @@ export function paginateNotes(
 
   const pages: B[][] = []
   let cur: B[] = []
-  let rem = opts.firstMm
+  let rem = opts.firstMm - extra
   for (const b of blocks) {
     if (b.mm > rem && cur.length > 0) {
       pages.push(cur)
       cur = []
-      rem = opts.contMm
+      rem = opts.contMm - extra
     }
     cur.push(b)
     rem -= b.mm
@@ -212,10 +239,11 @@ export function paginateNotes(
 /** Pack gallery photos into page-sized chunks (3-up grid, row-based). */
 export function paginatePhotos(
   photos: PhotoRef[],
-  opts: { firstMm?: number; contMm?: number; leadMm?: number } = {},
+  opts: { firstMm?: number; contMm?: number; leadMm?: number; headerExtraMm?: number } = {},
 ): PhotoRef[][] {
-  const firstMm = (opts.firstMm ?? GALLERY_FIRST_MM) - (opts.leadMm ?? 0)
-  const contMm = opts.contMm ?? GALLERY_CONT_MM
+  const extra = opts.headerExtraMm ?? 0
+  const firstMm = (opts.firstMm ?? GALLERY_FIRST_MM) - (opts.leadMm ?? 0) - extra
+  const contMm = (opts.contMm ?? GALLERY_CONT_MM) - extra
   const firstCount = Math.max(3, Math.floor(firstMm / GALLERY_ROW_MM) * 3)
   const contCount = Math.max(3, Math.floor(contMm / GALLERY_ROW_MM) * 3)
   if (photos.length === 0) return []

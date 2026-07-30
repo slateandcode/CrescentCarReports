@@ -1,4 +1,4 @@
-import type { PackageType } from './report-types'
+import type { PackageType, ReportBrand } from './report-types'
 
 // ════════════════════════════════════════════════════════════════════════
 // Package-driven inspection templates (Crescent Car Check Report Brief).
@@ -371,6 +371,57 @@ export const PACKAGE_LIST: PackageConfig[] = [
 export function getPackage(pkg: PackageType): PackageConfig {
   return PACKAGES[pkg]
 }
+
+// ─── New-report options (the "Choose a package" chooser) ─────────────────
+/**
+ * What the report chooser offers. A package is WHAT is inspected; a brand is
+ * WHOSE document comes out. Alpha Worldwide resell the Premium inspection under
+ * their own identity, so it is the Premium package with `brand: 'alpha'` — the
+ * same checks, scores and section pages, a different-looking document.
+ *
+ * Kept separate from PACKAGE_LIST (which drives the manual-booking picker,
+ * where brand has no meaning — a booking is scheduled work, not a document).
+ */
+export interface ReportOption extends PackageConfig {
+  /** Stable option key — not a PackageType (two options share 'premium'). */
+  key: string
+  packageType: PackageType
+  brand: ReportBrand
+  /** Exact button copy; the brand's own name, not the package's. */
+  ctaLabel: string
+}
+
+export const REPORT_OPTIONS: ReportOption[] = [
+  {
+    ...PACKAGES.standard,
+    key: 'standard',
+    packageType: 'standard',
+    brand: 'crescent',
+    ctaLabel: 'Start Standard report',
+  },
+  {
+    ...PACKAGES.premium,
+    key: 'premium',
+    packageType: 'premium',
+    brand: 'crescent',
+    ctaLabel: 'Start Premium report',
+  },
+  {
+    // "Copy everything in premium" — the inspection scope, price and feature
+    // list are Premium's verbatim; only the identity on the document differs.
+    ...PACKAGES.premium,
+    key: 'alpha',
+    packageType: 'premium',
+    brand: 'alpha',
+    name: 'Alpha',
+    // One highlighted option per row reads as a recommendation; two reads as
+    // noise. Premium keeps the badge.
+    popular: false,
+    description:
+      'The Premium inspection, delivered as an Alpha Worldwide branded report.',
+    ctaLabel: 'Start Alpha Report',
+  },
+]
 
 /** Items in a section visible at the given package tier. */
 function itemsForTier(section: SectionDef, pkg: PackageType): ChecklistItemDef[] {

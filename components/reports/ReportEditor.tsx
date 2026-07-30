@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Settings2, User, Car, ClipboardList, Armchair } from 'lucide-react'
 import { getTemplate } from '@/lib/report-templates'
+import { brandConfig } from '@/lib/report-brand'
 import { computeCounts, overallScore, recommendationFromScore, normalizeRecommendation, vehicleTitle } from '@/lib/report-utils'
 import { validateForCompletion } from '@/lib/report-validation'
 import { saveReport, completeReport, reopenReport, type ReportPatch } from '@/app/(app)/reports/actions'
@@ -71,6 +72,9 @@ export function ReportEditor({
   canDelete?: boolean
 }) {
   const template = useMemo(() => getTemplate(report.package_type), [report.package_type])
+  // Fixed at creation (migration 022) — not part of the form, so it needs no
+  // memo dependency on anything the inspector can change.
+  const brand = brandConfig(report)
 
   // The pristine server-loaded form. A stable reference (memoised on the report)
   // so the local-draft recovery effect can tell whether a stored draft actually
@@ -631,16 +635,18 @@ export function ReportEditor({
             </div>
 
             {/* White-label switch: some client businesses want the report with no
-                Crescent Car Check identity on it. One toggle strips it all —
-                logo, crescent marks, footers, domain, "Crescent Score" naming and
-                the company name in the disclaimer. Persists per report
-                (hide_branding, migration 021); default is branded. */}
+                identity on it at all. One toggle strips it — logo, marks,
+                footers, domain, score naming and the company name in the
+                disclaimer. Persists per report (hide_branding, migration 021);
+                default is branded. It outranks the report's brand, so on an
+                Alpha report it strips Alpha's identity rather than Crescent's —
+                which is what the labels below say. */}
             <div className="flex items-center justify-between gap-3 rounded-input border border-border bg-surface px-3 py-2.5">
               <div className="min-w-0">
-                <p className="text-sm font-medium text-text-primary">Crescent branding</p>
+                <p className="text-sm font-medium text-text-primary">{brand.name} branding</p>
                 <p className="mt-0.5 text-xs text-text-muted">
                   {form.hide_branding
-                    ? 'Hidden — the report carries no Crescent Car Check name or logo.'
+                    ? `Hidden — the report carries no ${brand.name} name or logo.`
                     : 'Shown on the report cover, headers, footers and score.'}
                 </p>
               </div>
@@ -648,7 +654,7 @@ export function ReportEditor({
                 type="button"
                 role="switch"
                 aria-checked={!form.hide_branding}
-                aria-label="Show Crescent branding on the report"
+                aria-label={`Show ${brand.name} branding on the report`}
                 onClick={() => patch({ hide_branding: !form.hide_branding })}
                 className={cn(
                   'relative h-6 w-11 shrink-0 rounded-full transition-colors',
