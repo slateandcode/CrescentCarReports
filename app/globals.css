@@ -225,11 +225,6 @@
 .report-doc--alpha {
   --accent-rgb: 34 165 219; /* #22a5db — Alpha light blue */
 }
-/* Alpha print their report reference in the brand blue; Crescent's stays the
-   quiet mono grey DocFooter sets, so this only paints under the modifier. */
-.report-doc--alpha .doc-ref {
-  color: rgb(var(--accent-rgb));
-}
 
 @media screen {
   .report-doc {

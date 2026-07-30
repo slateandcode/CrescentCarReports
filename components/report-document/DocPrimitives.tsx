@@ -126,24 +126,37 @@ export function DocHeader({ label }: { label: string }) {
   )
 }
 
-/** Alpha Worldwide running header: logo on the white end of a left-to-right
- *  wash into their blue, page label riding the saturated end. */
+/**
+ * Alpha Worldwide running header: logo on the white end of a left-to-right wash
+ * into their blue, page label riding the saturated end.
+ *
+ * Every number here is measured off the artwork they supplied: a 116px band
+ * (30.7mm), an 82px lockup (21.6mm) sitting 16px down, and a gradient that runs
+ * all the way to a deep royal #075ca6 rather than stopping at their light blue.
+ *
+ * `-mb-3` is the trick that lets the band be that tall. It pulls the following
+ * content wrapper up 12px, so the band COSTS 104px of layout while PAINTING
+ * 116px — the overlap falls entirely inside that wrapper's empty pt-9 padding,
+ * so nothing is covered. Without it the taller band pushed the hand-laid
+ * Exterior page (whose lead cannot reflow) past the 297mm sheet, and .report-page
+ * clips rather than growing.
+ */
 function AlphaHeader({ label }: { label: string }) {
   return (
-    <div className="alpha-only">
+    <div className="alpha-only -mb-3">
       <div
-        className="relative flex items-center justify-between overflow-hidden px-12 pb-[16px] pt-[16px]"
+        className="relative flex items-center justify-between overflow-hidden px-12 pb-[14px] pt-[16px]"
         style={{
           background:
-            'linear-gradient(90deg, #ffffff 0%, #eef6fc 18%, #a8d7ef 42%, #3fb0e0 68%, #1f9ed4 100%)',
+            'linear-gradient(90deg, #ffffff 6%, #f0f6fb 20%, #dbeaf8 30%, #c0dbf6 40%, #98c5f0 50%, #6faeec 60%, #4495e6 70%, #2380df 80%, #0c70d4 90%, #075ca6 100%)',
         }}
       >
         {/* Their mark, ghosted into the blue end — the same quiet signature the
             crescent watermark gives a Crescent page. */}
-        <span className="pointer-events-none absolute -top-8 right-20 block h-44 w-28 opacity-[0.14]">
+        <span className="pointer-events-none absolute -top-10 right-20 block h-48 w-28 opacity-[0.13]">
           <DocImg src="/alpha-mark.png" />
         </span>
-        <span className="relative block h-[73px] w-[168px]">
+        <span className="relative block h-[82px] w-[192px]">
           <DocImg src="/alpha-worldwide.png" alt="Alpha Worldwide" className="object-contain object-left" />
         </span>
         <span className="relative flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.28em] text-white">
@@ -151,7 +164,12 @@ function AlphaHeader({ label }: { label: string }) {
           <span className="h-1 w-1 rounded-full bg-white" />
         </span>
       </div>
-      <div className="h-[3px] w-full" style={{ backgroundColor: ALPHA_NAVY }} />
+      {/* The rule is a gradient too — navy under the logo, brightening with the
+          band above it. */}
+      <div
+        className="h-[4px] w-full"
+        style={{ background: `linear-gradient(90deg, ${ALPHA_NAVY} 0%, #0e60b6 40%, #2c8ae6 80%, #1e7ac9 100%)` }}
+      />
     </div>
   )
 }
@@ -175,10 +193,15 @@ export function DocFooter({ reference, note }: { reference: string; note?: strin
           https://alphaworldwide.me/
         </span>
       </span>
-      <span className="tnum font-mono text-doc-ink/70">
+      {/* Crescent prints the page name and the report reference. Alpha drops the
+          reference: "CCR" is Crescent Car Reports, so the code is brand leakage
+          on their document however neutral the rest of the page is. The report
+          is still identified by the Reference row on the Vehicle Summary page. */}
+      <span className="not-alpha tnum font-mono text-doc-ink/70">
         {note ? `${note} · ` : ''}
-        <span className="doc-ref">{reference}</span>
+        {reference}
       </span>
+      <span className="alpha-only text-doc-ink/70">{note}</span>
     </div>
   )
 }
