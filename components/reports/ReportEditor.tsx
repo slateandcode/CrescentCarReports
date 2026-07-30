@@ -14,6 +14,7 @@ import type {
   PaintCondition,
   PhotoRef,
 } from '@/lib/report-types'
+import { cn } from '@/lib/utils'
 import { REGIONAL_SPECS, TRANSMISSIONS, FUEL_TYPES, EMIRATES, VEHICLE_PLACEHOLDERS } from '@/lib/options'
 import { SLOT_TIMES, SLOTS } from '@/lib/booking-types'
 import { SectionAccordion } from './SectionAccordion'
@@ -51,6 +52,7 @@ type Form = Pick<
   | 'buyer_recommendation'
   | 'inspector_summary'
   | 'price_negotiation_notes'
+  | 'hide_branding'
 > & {
   checklist: ChecklistData
   photos: PhotoRef[]
@@ -96,6 +98,9 @@ export function ReportEditor({
       buyer_recommendation: normalizeRecommendation(report.buyer_recommendation) ?? null,
       inspector_summary: report.inspector_summary,
       price_negotiation_notes: report.price_negotiation_notes,
+      // Boolean() guards rows loaded before migration 021 (and old local drafts)
+      // where the column may be absent — absence must mean "branded", the default.
+      hide_branding: Boolean(report.hide_branding),
       checklist: report.checklist || {},
       photos: report.photos || [],
     }),
@@ -623,6 +628,40 @@ export function ReportEditor({
                 url={form.main_vehicle_image_url}
                 onChange={(url) => patch({ main_vehicle_image_url: url })}
               />
+            </div>
+
+            {/* White-label switch: some client businesses want the report with no
+                Crescent Car Check identity on it. One toggle strips it all —
+                logo, crescent marks, footers, domain, "Crescent Score" naming and
+                the company name in the disclaimer. Persists per report
+                (hide_branding, migration 021); default is branded. */}
+            <div className="flex items-center justify-between gap-3 rounded-input border border-border bg-surface px-3 py-2.5">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-text-primary">Crescent branding</p>
+                <p className="mt-0.5 text-xs text-text-muted">
+                  {form.hide_branding
+                    ? 'Hidden — the report carries no Crescent Car Check name or logo.'
+                    : 'Shown on the report cover, headers, footers and score.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={!form.hide_branding}
+                aria-label="Show Crescent branding on the report"
+                onClick={() => patch({ hide_branding: !form.hide_branding })}
+                className={cn(
+                  'relative h-6 w-11 shrink-0 rounded-full transition-colors',
+                  form.hide_branding ? 'bg-border' : 'bg-accent',
+                )}
+              >
+                <span
+                  className={cn(
+                    'absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-[left]',
+                    form.hide_branding ? 'left-0.5' : 'left-[22px]',
+                  )}
+                />
+              </button>
             </div>
           </div>
         </SectionAccordion>

@@ -76,7 +76,12 @@ export function ReportDocument({
   pages.push(<ReportDisclaimerPage key="disclaimer" report={report} index={next()} />)
 
   return (
-    <div className="report-doc bg-[#3A3A3A] print:bg-white">
+    // White-label mode: the modifier class drives the CSS-side brand swaps in the
+    // shared chrome (DocHeader/DocFooter/watermark — see globals.css); pages that
+    // hold the report branch in JSX on report.hide_branding themselves.
+    <div
+      className={`report-doc bg-[#3A3A3A] print:bg-white${report.hide_branding ? ' report-doc--unbranded' : ''}`}
+    >
       <ReportCoverPage report={report} template={template} />
       {pages}
     </div>

@@ -60,8 +60,9 @@ export function DocPage({
 }) {
   return (
     <div className={cn('report-page flex flex-col', className)}>
+      {/* brand-only: the crescent watermark disappears in white-label mode. */}
       {watermark && (
-        <span className="pointer-events-none absolute -bottom-10 -right-10 block h-64 w-64 opacity-[0.035]">
+        <span className="brand-only pointer-events-none absolute -bottom-10 -right-10 block h-64 w-64 opacity-[0.035]">
           <DocImg src="/crescent-mark-tight.png" className="object-contain" />
         </span>
       )}
@@ -79,12 +80,18 @@ function Wordmark({ className }: { className?: string }) {
   )
 }
 
-/** Slim near-black running header: wordmark left, page label right, gold rule. */
+/** Slim near-black running header: wordmark left, page label right, gold rule.
+ *  In white-label mode (`.report-doc--unbranded`, see globals.css) the wordmark
+ *  swaps for a neutral document title via the brand-only/unbranded-only classes —
+ *  this component never receives the report, so the toggle rides on CSS. */
 export function DocHeader({ label }: { label: string }) {
   return (
     <div className="bg-doc-ink">
       <div className="flex items-center justify-between px-12 pb-4 pt-5">
-        <Wordmark className="h-[26px] w-[132px]" />
+        <Wordmark className="brand-only h-[26px] w-[132px]" />
+        <span className="unbranded-only text-[11px] font-bold uppercase tracking-[0.3em] text-white/85">
+          Vehicle Inspection Report
+        </span>
         <span className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.28em] text-white/55">
           {label}
           <span className="h-1 w-1 rounded-full bg-accent" />
@@ -95,10 +102,13 @@ export function DocHeader({ label }: { label: string }) {
   )
 }
 
+/** Page footer. Brand line swaps for a neutral one in white-label mode (CSS
+ *  class toggle — same reasoning as DocHeader). */
 export function DocFooter({ reference, note }: { reference: string; note?: string }) {
   return (
     <div className="absolute inset-x-0 bottom-0 flex items-center justify-between border-t border-doc-border bg-white px-12 py-3 text-[10px] tracking-wide text-doc-muted">
-      <span className="uppercase tracking-[0.18em]">Crescent Car Reports · by Crescent Car Check</span>
+      <span className="brand-only uppercase tracking-[0.18em]">Crescent Car Reports · by Crescent Car Check</span>
+      <span className="unbranded-only uppercase tracking-[0.18em]">Vehicle Inspection Report</span>
       <span className="tnum font-mono text-doc-ink/70">{note ? `${note} · ` : ''}{reference}</span>
     </div>
   )

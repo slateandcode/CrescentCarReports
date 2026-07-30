@@ -93,6 +93,7 @@ export interface ReportPatch {
   buyer_recommendation?: string | null
   inspector_summary?: string | null
   price_negotiation_notes?: string | null
+  hide_branding?: boolean
   checklist?: ChecklistData
   critical_findings?: CriticalFinding[]
   photos?: PhotoRef[]
@@ -192,6 +193,7 @@ export async function saveReport(
     'buyer_recommendation',
     'inspector_summary',
     'price_negotiation_notes',
+    'hide_branding',
     'checklist',
     'photos',
   ]

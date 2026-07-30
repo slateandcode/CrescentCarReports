@@ -311,6 +311,10 @@ function PassEvidenceCard({ title, state }: { title: string; state: ChecklistIte
 export function ReportCoverPage({ report, template }: { report: InspectionReport; template: ResolvedTemplate }) {
   const date = report.inspection_date ? format(new Date(report.inspection_date), 'd MMM yyyy') : null
   const score = overallScore(report.package_type, report.checklist || {})
+  // White-label mode: no wordmark, no crescent mark, no domain/tagline strip,
+  // and the score loses its "Crescent" name. Layout heights are preserved so the
+  // composition doesn't shift.
+  const branded = !report.hide_branding
 
   const identity = [
     [report.vehicle_year, report.vehicle_make, report.vehicle_model].filter(Boolean).join(' '),
@@ -330,7 +334,8 @@ export function ReportCoverPage({ report, template }: { report: InspectionReport
           style={{ background: 'radial-gradient(120% 85% at 18% 42%, #151515 0%, #0a0a0a 58%)' }}
         />
         {/* The brand crescent — its own element behind the car: the actual mark
-            reading as the moon, with a soft ambient glow around it. */}
+            reading as the moon, with a soft ambient glow around it. White-label
+            keeps only the ambient glow so the dark field doesn't go flat. */}
         <div className="absolute left-[470px] top-[55px] h-[460px] w-[460px]">
           <div
             className="absolute -inset-20 rounded-full"
@@ -339,11 +344,13 @@ export function ReportCoverPage({ report, template }: { report: InspectionReport
                 'radial-gradient(circle, rgba(255,198,0,0.06) 28%, rgba(255,198,0,0.02) 52%, transparent 68%)',
             }}
           />
-          <DocImg
-            src="/crescent-mark-tight.png"
-            className="object-contain"
-            style={{ opacity: 0.2, filter: 'blur(1px)' }}
-          />
+          {branded && (
+            <DocImg
+              src="/crescent-mark-tight.png"
+              className="object-contain"
+              style={{ opacity: 0.2, filter: 'blur(1px)' }}
+            />
+          )}
         </div>
 
         {/* The car — its own element emerging from the dark. Three passes of the
@@ -396,9 +403,13 @@ export function ReportCoverPage({ report, template }: { report: InspectionReport
         {/* Gold top rule — the same signature every inner page carries via DocHeader. */}
         <div className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-accent via-accent/50 to-transparent" />
 
+        {/* Fixed-height block whether branded or not, so the headline below
+            never shifts when the wordmark is stripped. */}
         <div className="relative px-14 pt-[84px]">
           <span className="relative block h-[64px] w-[340px]">
-            <DocImg src="/logo-wordmark.png" alt="Crescent Car Check" className="object-contain object-left" />
+            {branded && (
+              <DocImg src="/logo-wordmark.png" alt="Crescent Car Check" className="object-contain object-left" />
+            )}
           </span>
         </div>
 
@@ -428,18 +439,32 @@ export function ReportCoverPage({ report, template }: { report: InspectionReport
               <CoverStat icon={<ShieldCheck size={30} strokeWidth={1.6} />} label="Package" value={template.name} sub={template.pointLabel} />
               {date && <CoverStat icon={<CalendarDays size={30} strokeWidth={1.6} />} label="Inspection date" value={date} />}
               <CoverStat icon={<FileText size={30} strokeWidth={1.6} />} label="Reference" value={report.report_reference} />
-              {score != null && <CoverStat icon={<ScoreRing score={score} />} label="Crescent Score" value={`${score}/100`} />}
+              {score != null && (
+                <CoverStat
+                  icon={<ScoreRing score={score} />}
+                  label={branded ? 'Crescent Score' : 'Overall Score'}
+                  value={`${score}/100`}
+                />
+              )}
             </div>
           </div>
 
+          {/* Bottom strip: domain + tagline are brand voice, so white-label keeps
+              only the closing rule (same height) as a quiet visual full stop. */}
           <div className="mt-11 flex items-center justify-between border-t border-white/10 px-14 py-7">
-            <span className="flex items-center gap-2.5 text-[13.5px] font-medium text-white/85">
-              <Globe size={17} className="text-accent" />
-              crescentcarcheck.com
-            </span>
-            <p className="text-[13.5px] font-medium text-white/85">
-              Driven by <span className="text-accent">Trust.</span> Backed by <span className="text-accent">Detail.</span>
-            </p>
+            {branded ? (
+              <>
+                <span className="flex items-center gap-2.5 text-[13.5px] font-medium text-white/85">
+                  <Globe size={17} className="text-accent" />
+                  crescentcarcheck.com
+                </span>
+                <p className="text-[13.5px] font-medium text-white/85">
+                  Driven by <span className="text-accent">Trust.</span> Backed by <span className="text-accent">Detail.</span>
+                </p>
+              </>
+            ) : (
+              <span className="text-[13.5px] font-medium text-white/85">&nbsp;</span>
+            )}
           </div>
         </div>
       </div>
@@ -622,6 +647,8 @@ export function ReportExecutiveSummaryPage({
   const rec = normalizeRecommendation(report.buyer_recommendation) ?? recommendationFromScore(score)
   const cards = sectionScores(report.package_type, checklist)
   const majorFindings = deriveAutoFindings(report.package_type, checklist)
+  // White-label: the score keeps its meaning but loses the brand's name for it.
+  const scoreName = report.hide_branding ? 'Overall Score' : 'Crescent Score'
 
   return (
     <DocPage>
@@ -631,7 +658,7 @@ export function ReportExecutiveSummaryPage({
 
         {/* Hero: score gauge + recommendation + counts */}
         <div className="flex items-center gap-7 rounded-2xl border border-doc-border bg-doc-surface p-6">
-          <HealthGauge score={score} />
+          <HealthGauge score={score} scoreLabel={scoreName.toUpperCase()} />
           <div className="min-w-0 flex-1">
             {template.recommendationEnabled ? (
               <>
@@ -640,7 +667,7 @@ export function ReportExecutiveSummaryPage({
               </>
             ) : (
               <>
-                <p className="text-[9.5px] font-semibold uppercase tracking-[0.2em] text-doc-muted">Crescent Score</p>
+                <p className="text-[9.5px] font-semibold uppercase tracking-[0.2em] text-doc-muted">{scoreName}</p>
                 <p className="mt-1 text-[15px] font-bold text-doc-ink">{score != null ? `${score} / 100` : 'Not graded'}</p>
               </>
             )}
@@ -1291,7 +1318,11 @@ export function ReportFinalNotesPage({
     <div className="mt-auto rounded-2xl border border-doc-border bg-doc-surface px-5 py-4">
       <div className="flex items-center gap-2 text-[13px] font-semibold text-doc-ink">
         <ShieldCheck size={16} className="text-pass" />
-        {completed ? `Report issued on ${completed}.` : 'Report prepared by Crescent Car Check.'}
+        {completed
+          ? `Report issued on ${completed}.`
+          : report.hide_branding
+            ? 'Report prepared by your inspection team.'
+            : 'Report prepared by Crescent Car Check.'}
       </div>
       <p className="mt-1.5 text-[11px] text-doc-muted">
         Reference {report.report_reference} · {template.name} · {template.pointLabel}
@@ -1350,46 +1381,58 @@ function Callout({ title, children }: { title?: string; children: React.ReactNod
 // ════════════════════════════════════════════════════════════════════════
 // Legal Disclaimer (brief section 13)
 // ════════════════════════════════════════════════════════════════════════
-const DISCLAIMER_POINTS: { title: string; body: string }[] = [
-  {
-    title: 'Scope of Inspection',
-    body: 'This report is based on a visual inspection of the vehicle at the time and location of inspection. Crescent Car Check may remove accessible plastic covers, undertrays, or inspection covers where safe, practical, and permitted. However, we do not dismantle mechanical components, open sealed parts, or carry out full workshop-level diagnosis unless expressly stated in the report.',
-  },
-  {
-    title: 'No Guarantee',
-    body: 'This report is not a warranty, guarantee, certification, valuation, or confirmation that the vehicle is free from faults. Some issues may be hidden, intermittent, inaccessible, or not visible during the inspection. Crescent Car Check is not responsible for faults that could not reasonably be detected during the inspection.',
-  },
-  {
-    title: 'Not an Official Test',
-    body: 'This inspection is a private pre-purchase inspection for the customer’s information only. It is not an RTA test, registration test, insurance inspection, legal certification, or official roadworthiness approval.',
-  },
-  {
-    title: 'Buyer Responsibility',
-    body: 'The final decision to buy, reject, or negotiate remains entirely with the customer. Crescent Car Check provides inspection findings and purchase-risk guidance only. Where serious issues are found, further workshop diagnosis is recommended before purchase.',
-  },
-  {
-    title: 'Seller Acknowledgment',
-    body: 'By allowing the inspection, the seller acknowledges that Crescent Car Check is acting for the customer/buyer, not the seller. Any disagreement about the vehicle’s condition, price, sale, or disclosure of defects is a matter between the buyer and seller.',
-  },
-  {
-    title: 'No Liability to Seller',
-    body: 'Crescent Car Check has no contractual relationship with the seller unless agreed in writing. Crescent Car Check is not responsible for any loss of sale, price reduction, dispute, or claim arising between the buyer and seller as a result of the inspection findings.',
-  },
-  {
-    title: 'Photos and Evidence',
-    body: 'Photos in the report are supporting evidence only and may not show every issue, angle, or component inspected. Absence of a photo does not mean an item was not checked.',
-  },
-  {
-    title: 'Limitation of Liability',
-    body: 'To the maximum extent permitted by law, Crescent Car Check is not liable for indirect losses, buyer/seller disputes, loss of profit, loss of opportunity, hidden faults, intermittent faults, or issues not reasonably detectable at the time of inspection.',
-  },
-  {
-    title: 'Acceptance',
-    body: 'By booking, permitting, or relying on this inspection, the relevant parties accept that the report is limited to the inspection carried out at the time and location of the vehicle inspection.',
-  },
-]
+/**
+ * The legal text names the company throughout, so in white-label mode every
+ * reference swaps for a neutral "the inspection provider". `p` is the
+ * mid-sentence form, `P` the sentence-start form (both are simply the brand
+ * name when branded — template literals keep one canonical text, not two
+ * drifting copies).
+ */
+function disclaimerPoints(branded: boolean): { title: string; body: string }[] {
+  const p = branded ? 'Crescent Car Check' : 'the inspection provider'
+  const P = branded ? 'Crescent Car Check' : 'The inspection provider'
+  return [
+    {
+      title: 'Scope of Inspection',
+      body: `This report is based on a visual inspection of the vehicle at the time and location of inspection. ${P} may remove accessible plastic covers, undertrays, or inspection covers where safe, practical, and permitted. However, we do not dismantle mechanical components, open sealed parts, or carry out full workshop-level diagnosis unless expressly stated in the report.`,
+    },
+    {
+      title: 'No Guarantee',
+      body: `This report is not a warranty, guarantee, certification, valuation, or confirmation that the vehicle is free from faults. Some issues may be hidden, intermittent, inaccessible, or not visible during the inspection. ${P} is not responsible for faults that could not reasonably be detected during the inspection.`,
+    },
+    {
+      title: 'Not an Official Test',
+      body: 'This inspection is a private pre-purchase inspection for the customer’s information only. It is not an RTA test, registration test, insurance inspection, legal certification, or official roadworthiness approval.',
+    },
+    {
+      title: 'Buyer Responsibility',
+      body: `The final decision to buy, reject, or negotiate remains entirely with the customer. ${P} provides inspection findings and purchase-risk guidance only. Where serious issues are found, further workshop diagnosis is recommended before purchase.`,
+    },
+    {
+      title: 'Seller Acknowledgment',
+      body: `By allowing the inspection, the seller acknowledges that ${p} is acting for the customer/buyer, not the seller. Any disagreement about the vehicle’s condition, price, sale, or disclosure of defects is a matter between the buyer and seller.`,
+    },
+    {
+      title: 'No Liability to Seller',
+      body: `${P} has no contractual relationship with the seller unless agreed in writing. ${P} is not responsible for any loss of sale, price reduction, dispute, or claim arising between the buyer and seller as a result of the inspection findings.`,
+    },
+    {
+      title: 'Photos and Evidence',
+      body: 'Photos in the report are supporting evidence only and may not show every issue, angle, or component inspected. Absence of a photo does not mean an item was not checked.',
+    },
+    {
+      title: 'Limitation of Liability',
+      body: `To the maximum extent permitted by law, ${p} is not liable for indirect losses, buyer/seller disputes, loss of profit, loss of opportunity, hidden faults, intermittent faults, or issues not reasonably detectable at the time of inspection.`,
+    },
+    {
+      title: 'Acceptance',
+      body: 'By booking, permitting, or relying on this inspection, the relevant parties accept that the report is limited to the inspection carried out at the time and location of the vehicle inspection.',
+    },
+  ]
+}
 
 export function ReportDisclaimerPage({ report, index }: { report: InspectionReport; index: string }) {
+  const branded = !report.hide_branding
   return (
     <DocPage watermark>
       <DocHeader label="Disclaimer" />
@@ -1398,7 +1441,7 @@ export function ReportDisclaimerPage({ report, index }: { report: InspectionRepo
 
         <div className="rounded-2xl border border-doc-border bg-doc-surface p-6">
           <ol className="space-y-3">
-            {DISCLAIMER_POINTS.map((p, i) => (
+            {disclaimerPoints(branded).map((p, i) => (
               <li key={i} className="avoid-break flex gap-3 text-[11.5px] leading-relaxed text-doc-ink">
                 <span className="tnum mt-0.5 shrink-0 text-[11px] font-bold text-accent">{String(i + 1).padStart(2, '0')}</span>
                 <span>
@@ -1415,7 +1458,8 @@ export function ReportDisclaimerPage({ report, index }: { report: InspectionRepo
             By relying on this report, the recipient acknowledges and accepts the terms of this disclaimer.
           </p>
           <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-doc-muted">
-            Crescent Car Reports · by Crescent Car Check · {report.report_reference}
+            {branded ? 'Crescent Car Reports · by Crescent Car Check' : 'Vehicle Inspection Report'} ·{' '}
+            {report.report_reference}
           </p>
         </div>
       </div>

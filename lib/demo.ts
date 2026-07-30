@@ -135,6 +135,7 @@ function base(pkg: PackageType, ref: string): InspectionReport {
     buyer_recommendation: null,
     inspector_summary: null,
     price_negotiation_notes: null,
+    hide_branding: false,
     checklist: {},
     critical_findings: [],
     photos: [],

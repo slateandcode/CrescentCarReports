@@ -173,6 +173,23 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ── White-label mode (report.hide_branding, migration 021) ──────────────
+   The document root gets `report-doc--unbranded`, and the shared chrome
+   (DocHeader / DocFooter / DocPage watermark — components that don't receive
+   the report object) swaps by CSS class, mirroring the existing `no-print`
+   pattern. Pages that DO hold the report (cover, disclaimer, …) branch in JSX
+   instead. `display: revert` restores the element's stylesheet default, so a
+   span comes back inline and a div comes back block without hardcoding. */
+.report-doc .unbranded-only {
+  display: none;
+}
+.report-doc--unbranded .unbranded-only {
+  display: revert;
+}
+.report-doc--unbranded .brand-only {
+  display: none !important;
+}
+
 @media screen {
   .report-doc {
     padding: 24px 12px 80px;

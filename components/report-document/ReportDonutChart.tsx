@@ -84,7 +84,16 @@ export function DonutLegend({ counts }: { counts: ReportCounts }) {
  * score and shades green→amber→red by band. The hero element of the verdict
  * page.
  */
-export function HealthGauge({ score, size = 196 }: { score: number | null; size?: number }) {
+export function HealthGauge({
+  score,
+  size = 196,
+  // "CRESCENT SCORE" is brand identity — white-label reports pass a neutral name.
+  scoreLabel = 'CRESCENT SCORE',
+}: {
+  score: number | null
+  size?: number
+  scoreLabel?: string
+}) {
   const radius = 64
   const circ = 2 * Math.PI * radius
   const sweep = 0.75 // 270° arc
@@ -128,7 +137,7 @@ export function HealthGauge({ score, size = 196 }: { score: number | null; size?
         {band.toUpperCase()}
       </text>
       <text x="80" y="113" textAnchor="middle" fontSize="8.5" fontWeight="600" fill="#9CA3AF" letterSpacing="1">
-        CRESCENT SCORE
+        {scoreLabel}
       </text>
     </svg>
   )

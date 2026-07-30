@@ -128,8 +128,9 @@ export function StickyReportActions({
   onSave: () => void
   onComplete: () => void
   onReopen: () => void
-  /** Flush pending autosave changes before an in-editor client-side navigation
-   *  (the Preview link). Awaited, but navigation proceeds regardless. */
+  /** Flush pending autosave changes before an action that renders server state —
+   *  the Preview link AND the Download button both use it, so neither can show a
+   *  stale pre-debounce snapshot. Awaited, but the action proceeds regardless. */
   onNavigate?: () => Promise<void>
   customerPhone?: string | null
   vehicleLabel: string
@@ -189,6 +190,10 @@ export function StickyReportActions({
             busyLabel="…"
             fallbackLabel="Print"
             className={ACTION_BTN}
+            // Same flush the Preview link performs: pending edits (a branding
+            // toggle, a comment mid-debounce) are saved before the PDF renders,
+            // so Download always reflects what's on screen.
+            beforeDownload={onNavigate}
           />
           {waUrl ? (
             <a

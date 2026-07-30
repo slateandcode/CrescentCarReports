@@ -145,6 +145,9 @@ export interface InspectionReport {
   buyer_recommendation: AnyRecommendation | null
   inspector_summary: string | null
   price_negotiation_notes: string | null
+  /** White-label switch (migration 021): true strips all Crescent Car Check
+   *  identity from the customer-facing document. Default false = branded. */
+  hide_branding: boolean
 
   checklist: ChecklistData
   critical_findings: CriticalFinding[]
