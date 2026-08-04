@@ -478,6 +478,10 @@ export function ReportCoverPage({ report, template }: { report: InspectionReport
 // ════════════════════════════════════════════════════════════════════════
 // Page 1: Cover — Alpha Worldwide
 // ════════════════════════════════════════════════════════════════════════
+/** Melts the tires into white so the image's bottom edge never prints as a slice. */
+const CAR_GROUND_FADE =
+  'linear-gradient(180deg, #000 90%, rgba(0,0,0,0.5) 96%, transparent 100%)'
+
 /**
  * Alpha Worldwide's cover, reproduced from the artwork they supplied.
  *
@@ -494,52 +498,48 @@ export function ReportAlphaCoverPage() {
       {/* Full-bleed rule in their light blue — the cover's one horizontal edge. */}
       <div className="absolute inset-x-0 top-0 h-[7px] bg-accent" />
 
-      {/* Their mark, ghosted behind the top-right corner. Deliberately NOT
-          object-contain: the supplied cover stretches the chevron tall and
-          narrow (142 × 247 on the sheet), and letting it fill the box
-          reproduces that rather than snapping back to the square asset. */}
-      <span className="pointer-events-none absolute right-[40px] top-[56px] block h-[247px] w-[142px] opacity-[0.07]">
-        <DocImg src="/alpha-mark.png" />
+      {/* Their mark, ghosted behind the top-right corner.
+          The box is the ASSET's own 201 × 207 aspect and the image is
+          object-contain, so the chevron keeps its true proportions. An earlier
+          pass copied the supplied cover's 142 × 247 box literally, which
+          squeezed the arrow ~40% narrow — Alpha flagged it as not their logo
+          shape (amendments, cover + every page). Scale and bleed match the
+          corrected artwork: large, apex near the top-right, arms running off
+          the right edge. */}
+      <span className="pointer-events-none absolute right-[-147px] top-[52px] block h-[560px] w-[544px] opacity-[0.07]">
+        <DocImg src="/alpha-mark.png" className="object-contain" />
       </span>
 
-      {/* The car runs well off the right edge — the artwork frames it from the
-          left headlight across, with roughly a third of the body past the trim.
-          Box is the image's own 1.43 aspect so object-contain adds no
-          letterboxing, and it is painted before the headline so "YOU INVEST."
-          crosses over it, as in the artwork. Geometry (left edge at 45% of the
-          sheet, 43% of sheet height) is measured off the supplied cover.
+      {/* The car, exactly as the corrected artwork places it: ONE unmasked
+          image, hard edges and all. Earlier passes tried to feather the leading
+          edge with mask gradients (vertical wipes, then an elliptical lens) and
+          every variant read as a milky curtain — because the reference has no
+          fade anywhere: the mirror, fender and wheel are crisp photo cutout.
+          What makes the type work in the artwork is PLACEMENT, not masking:
+          the car sits low and far enough right that "INVEST." ends over the
+          bright DRL/headlight area of the photo and "…Surprises!" clears the
+          fender entirely.
 
-          Two passes, the same dissolve the Crescent cover uses — a hard-edged
-          cutout dropped on the page reads as clip-art. A blurred ghost gives the
-          silhouette something to melt into, the sharp pass is masked tighter so
-          only the core stays crisp, and the wrapper mask fades the whole element
-          out toward its edges. No brightness/contrast filters here: the car is
-          already near-black and the field is white, so it needs softening, not
-          darkening. */}
+          Size and vertical seat are landmark-matched to the corrected mock
+          (wheel-arch left edge, mirror top, car bottom mapped between the mock
+          and the asset): ~10% smaller than our first pass and ~40px lower. The
+          horizontal seat came from a live position sweep, not the mock — the
+          mock's screenshot is squeezed, so its x-landmarks lie: left edge lands
+          at x≈451, where the period sits on paper just off the headlight and
+          "…Surprises!" clears the fender by 60px. Box keeps the image's own
+          1.43 aspect so object-contain adds no letterboxing.
+
+          The one mask that survives is the ground fade — the photo's tires end
+          at the image's own bottom edge, which printed as a hard slice across
+          mid-page. The artwork melts the wheels into white the same way. */}
       <div
-        className="absolute right-[-254px] top-[359px] h-[483px] w-[691px]"
+        className="absolute right-[-376px] top-[346px] h-[503px] w-[719px]"
         style={{
-          WebkitMaskImage:
-            'radial-gradient(82% 80% at 52% 50%, #000 64%, rgba(0,0,0,0.85) 79%, rgba(0,0,0,0.35) 92%, transparent 100%)',
-          maskImage:
-            'radial-gradient(82% 80% at 52% 50%, #000 64%, rgba(0,0,0,0.85) 79%, rgba(0,0,0,0.35) 92%, transparent 100%)',
+          WebkitMaskImage: CAR_GROUND_FADE,
+          maskImage: CAR_GROUND_FADE,
         }}
       >
-        <DocImg
-          src="/cover-car.png"
-          className="object-contain"
-          style={{ filter: 'blur(6px)', opacity: 0.4 }}
-        />
-        <DocImg
-          src="/cover-car.png"
-          className="object-contain"
-          style={{
-            WebkitMaskImage:
-              'radial-gradient(80% 76% at 52% 50%, #000 58%, rgba(0,0,0,0.7) 77%, transparent 95%)',
-            maskImage:
-              'radial-gradient(80% 76% at 52% 50%, #000 58%, rgba(0,0,0,0.7) 77%, transparent 95%)',
-          }}
-        />
+        <DocImg src="/cover-car.png" className="object-contain" />
       </div>
 
       <div className="relative px-14 pt-[56px]">

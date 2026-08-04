@@ -152,9 +152,12 @@ function AlphaHeader({ label }: { label: string }) {
         }}
       >
         {/* Their mark, ghosted into the blue end — the same quiet signature the
-            crescent watermark gives a Crescent page. */}
-        <span className="pointer-events-none absolute -top-10 right-20 block h-48 w-28 opacity-[0.13]">
-          <DocImg src="/alpha-mark.png" />
+            crescent watermark gives a Crescent page. Box carries the asset's own
+            201 × 207 aspect and the image is object-contain: the arrow must not
+            be squeezed narrow here either (Alpha's amendment was "repeat for
+            every page"). The band clips whatever falls outside it. */}
+        <span className="pointer-events-none absolute -top-[16px] right-20 block h-[148px] w-[144px] opacity-[0.13]">
+          <DocImg src="/alpha-mark.png" className="object-contain" />
         </span>
         <span className="relative block h-[82px] w-[192px]">
           <DocImg src="/alpha-worldwide.png" alt="Alpha Worldwide" className="object-contain object-left" />
