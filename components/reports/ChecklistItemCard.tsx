@@ -61,7 +61,15 @@ function ChecklistItemCardImpl({
 
   function regen(next: ChecklistItemState): string {
     const s = itemStatus(next)
-    if (!isIssue(s)) return next.comment ?? ''
+    // Downgraded to Pass / N/A → the auto-comment must GO, not carry over. Returning
+    // the previous comment here left the fault sentence from the old severity sitting
+    // under a green PASS badge ("A minor issue was noted for engine endoscopic
+    // inspection." on a passed item) — and because the document prints the comment
+    // with no status guard, it shipped to the customer's PDF. Only ever reached when
+    // the comment is auto-generated (`commit` checks manualRef first), so this can
+    // never discard something the inspector typed. Blank, not a "no visible issue"
+    // line: every other passed item renders with no comment at all.
+    if (!isIssue(s)) return ''
     return generateComment({
       itemTitle: item.title,
       status: s as ChecklistStatus,
