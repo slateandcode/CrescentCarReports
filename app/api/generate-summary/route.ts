@@ -16,6 +16,7 @@ import {
 } from '@/lib/report-utils'
 import { PAINT_SECTION_ID, PAINT_PANELS, PAINT_LABEL } from '@/lib/issues'
 import type { InspectionReport } from '@/lib/report-types'
+import { GROQ_ENDPOINT, GROQ_MODEL, reasoningParams, stripReasoning } from '@/lib/groq'
 
 // Reads cookies (auth), fetches the report and calls an external API — Node only,
 // never cached.
@@ -23,9 +24,6 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 // A short summary returns in a few seconds on Groq; cap generously but under any limit.
 export const maxDuration = 30
-
-const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile'
-const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions'
 
 // The brief's Inspector Summary prompt (item 10): faithful, buyer-facing, grounded
 // only in the report data. Strict no-fabrication rules — on an inspection report,
@@ -145,7 +143,11 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         model: GROQ_MODEL,
         temperature: 0.4,
-        max_tokens: 700,
+        // A 200–300 word summary is ~400 tokens, but on a reasoning model the
+        // hidden thinking is billed against the same budget — 700 truncated the
+        // summary mid-sentence. Headroom is cheap; a cut-off summary is not.
+        max_tokens: 2048,
+        ...reasoningParams(GROQ_MODEL),
         messages: [
           { role: 'system', content: SYSTEM_INSTRUCTION },
           { role: 'user', content: digest },
@@ -164,7 +166,7 @@ export async function POST(req: NextRequest) {
     }
 
     const data = await res.json()
-    const text = (data?.choices?.[0]?.message?.content ?? '').trim()
+    const text = stripReasoning(data?.choices?.[0]?.message?.content ?? '')
     if (!text) {
       console.error('[generate-summary] empty completion', data?.choices?.[0]?.finish_reason ?? 'unknown')
       return NextResponse.json(

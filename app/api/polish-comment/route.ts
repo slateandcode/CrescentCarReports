@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getSessionUser } from '@/lib/auth'
+import { GROQ_ENDPOINT, GROQ_MODEL, reasoningParams, stripReasoning } from '@/lib/groq'
 
 // Reads cookies (for auth) and calls an external API — must run on Node and never
 // be cached.
@@ -8,13 +9,6 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 // A short text rewrite returns in ~1s on Groq; cap generously but well under any limit.
 export const maxDuration = 30
-
-// Groq's OpenAI-compatible chat endpoint. `llama-3.3-70b-versatile` is a strong,
-// fast instruction-follower on the free tier. NOT a reasoning model, so it emits
-// the answer directly (no <think> tokens to strip). Pin a different free model via
-// GROQ_MODEL (e.g. openai/gpt-oss-120b) if you prefer.
-const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile'
-const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions'
 
 // Inspector notes are short; reject anything implausibly large rather than burn
 // quota on it.
@@ -84,6 +78,7 @@ export async function POST(req: NextRequest) {
         // Low temperature: we want a faithful clean-up, not a creative rewrite.
         temperature: 0.2,
         max_tokens: 1024,
+        ...reasoningParams(GROQ_MODEL),
         messages: [
           { role: 'system', content: SYSTEM_INSTRUCTION },
           { role: 'user', content: text },
@@ -103,7 +98,7 @@ export async function POST(req: NextRequest) {
     }
 
     const data = await res.json()
-    const polished = (data?.choices?.[0]?.message?.content ?? '').trim()
+    const polished = stripReasoning(data?.choices?.[0]?.message?.content ?? '')
 
     if (!polished) {
       console.error(
