@@ -16,7 +16,13 @@ import {
 } from '@/lib/report-utils'
 import { PAINT_SECTION_ID, PAINT_PANELS, PAINT_LABEL } from '@/lib/issues'
 import type { InspectionReport } from '@/lib/report-types'
-import { GROQ_ENDPOINT, GROQ_MODEL, reasoningParams, stripReasoning } from '@/lib/groq'
+import {
+  GROQ_ENDPOINT,
+  GROQ_MODEL,
+  reasoningParams,
+  sanitizeModelText,
+  stripReasoning,
+} from '@/lib/groq'
 
 // Reads cookies (auth), fetches the report and calls an external API — Node only,
 // never cached.
@@ -166,7 +172,7 @@ export async function POST(req: NextRequest) {
     }
 
     const data = await res.json()
-    const text = stripReasoning(data?.choices?.[0]?.message?.content ?? '')
+    const text = sanitizeModelText(stripReasoning(data?.choices?.[0]?.message?.content ?? ''))
     if (!text) {
       console.error('[generate-summary] empty completion', data?.choices?.[0]?.finish_reason ?? 'unknown')
       return NextResponse.json(

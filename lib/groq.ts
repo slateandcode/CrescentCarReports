@@ -46,3 +46,22 @@ export function stripReasoning(content: string): string {
     .replace(/<think>[\s\S]*$/i, '')
     .trim()
 }
+
+/**
+ * Normalise exotic Unicode in model output to characters the report font can
+ * actually draw. gpt-oss (unlike the llama model it replaced) writes typographic
+ * characters — above all U+2011 NON-BREAKING HYPHEN in compounds like
+ * "non-original" — which the self-hosted Inter latin subset has no glyph for, so
+ * summaries and polished comments rendered with black .notdef "tofu" boxes where
+ * the hyphens should be.
+ *
+ * En/em dashes, curly quotes and ellipses are left alone — Inter covers those.
+ * Kept in sync with scripts/fix-ai-unicode.mjs, the one-off cleanup for rows
+ * saved before this existed.
+ */
+export function sanitizeModelText(text: string): string {
+  return text
+    .replace(/[\u2010\u2011\u2212]/g, '-') // hyphen, non-breaking hyphen, minus sign
+    .replace(/[\u00A0\u2007\u2009\u200A\u202F]/g, ' ') // no-break / figure / thin / hair / narrow spaces
+    .replace(/[\u200B-\u200D\u2060\uFEFF]/g, '') // zero-width characters
+}

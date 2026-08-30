@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getSessionUser } from '@/lib/auth'
-import { GROQ_ENDPOINT, GROQ_MODEL, reasoningParams, stripReasoning } from '@/lib/groq'
+import {
+  GROQ_ENDPOINT,
+  GROQ_MODEL,
+  reasoningParams,
+  sanitizeModelText,
+  stripReasoning,
+} from '@/lib/groq'
 
 // Reads cookies (for auth) and calls an external API — must run on Node and never
 // be cached.
@@ -98,7 +104,7 @@ export async function POST(req: NextRequest) {
     }
 
     const data = await res.json()
-    const polished = stripReasoning(data?.choices?.[0]?.message?.content ?? '')
+    const polished = sanitizeModelText(stripReasoning(data?.choices?.[0]?.message?.content ?? ''))
 
     if (!polished) {
       console.error(
