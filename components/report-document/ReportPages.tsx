@@ -268,14 +268,22 @@ function EmptySection({ label }: { label: string }) {
 /**
  * Split a section's graded items (template order) into:
  *   issues       Minor / Major items (detailed cards)
- *   passEvidence Pass / N/A items that carry evidence photos, plus EVERY
- *                explicit N/A item (compact card with its true status badge)
- *   passes       Pass items with no photos (chip list, hard-coded Pass badge)
+ *   passEvidence Pass / N/A items that carry evidence photos or a HAND-EDITED
+ *                comment, plus every explicit N/A item (compact card with its
+ *                true status badge)
+ *   passes       remaining Pass items (chip list, hard-coded Pass badge)
  * Pass items can legitimately carry evidence (e.g. OBD scan, battery test, AC
  * reading), so their photos must surface in the customer report too. N/A items
  * (legacy rows — the current editor can't set N/A) must NEVER land in `passes`:
  * PassList badges every row green "Pass", which told the customer a check
  * passed when it was recorded not-applicable.
+ *
+ * Hand-edited pass comments (commentManual — e.g. a caveat the inspector typed
+ * on a passing Accident History check) must print: the editor accepts them on
+ * any status, and as a bare chip the caveat silently vanished from the
+ * document. ONLY manual ones — auto-generated text is deliberately blanked on
+ * non-issue statuses (see ChecklistItemCard.regen), and printing a stale one
+ * from a legacy row would put a fault sentence under a green Pass badge again.
  */
 function splitItems(report: InspectionReport, section: SectionDef) {
   const state = report.checklist?.[section.id] || {}
@@ -289,8 +297,9 @@ function splitItems(report: InspectionReport, section: SectionDef) {
     // coherent (no "92/92 passed" up top while every section page says "not
     // assessed"). Issue/evidence branches only fire when `st` is present.
     const status = effectiveStatus(st)
+    const manualComment = st?.commentManual === true && (st.comment ?? '').trim().length > 0
     if (st && isIssue(status)) issues.push({ title: item.title, state: st })
-    else if (st && ((st.photos?.length ?? 0) > 0 || itemStatus(st) === 'na'))
+    else if (st && ((st.photos?.length ?? 0) > 0 || itemStatus(st) === 'na' || manualComment))
       passEvidence.push({ title: item.title, state: st })
     else passes.push(item.title)
   }
