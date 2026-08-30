@@ -29,6 +29,34 @@ import { DeleteReportButton } from './DeleteReportButton'
 
 const AUTOSAVE_MS = 1500
 
+/**
+ * Canonical form for draft-vs-server comparison. Raw JSON.stringify could never
+ * say "equal" for a report with photos: every server load re-signs each photo
+ * URL (fresh token/expiry in the query string) and Postgres jsonb re-orders
+ * object keys — so the recovery banner cried wolf after every
+ * committed-but-lost save, training inspectors to distrust (and Discard) the
+ * one control that guards real unsaved work. Deep-sorts keys and strips the
+ * volatile query from storage URLs; content differences still compare unequal.
+ */
+function canonicalize(value: unknown): unknown {
+  if (typeof value === 'string') {
+    const q = value.indexOf('?')
+    return q !== -1 && value.includes('/storage/v1/object/') ? value.slice(0, q) : value
+  }
+  if (Array.isArray(value)) return value.map(canonicalize)
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const k of Object.keys(value).sort()) {
+      out[k] = canonicalize((value as Record<string, unknown>)[k])
+    }
+    return out
+  }
+  return value
+}
+function formsEqual(a: unknown, b: unknown): boolean {
+  return JSON.stringify(canonicalize(a)) === JSON.stringify(canonicalize(b))
+}
+
 /** Local editable slice of the report. */
 type Form = Pick<
   InspectionReport,
@@ -151,8 +179,21 @@ export function ReportEditor({
   // own save committed but its reply was lost on flaky mobile data" (self-heal
   // silently) apart from "another tab/user saved" (genuine conflict). A second
   // tab of the same report gets its own token, so real conflicts still surface.
-  // Created lazily on the first save — render must stay pure (react-hooks/purity).
+  // Created lazily outside render — render must stay pure (react-hooks/purity).
+  // Doubles as this TAB's identity for the localStorage draft (see the mirror
+  // effect below), so one tab's save can't delete a sibling tab's backup.
   const writerToken = useRef<string | null>(null)
+  const ensureWriterToken = () => {
+    writerToken.current ??=
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`
+    return writerToken.current
+  }
+  // True while the mount-time recovery prompt is undecided. Guards the draft
+  // mirror: the first keystroke behind the banner must not overwrite the very
+  // draft the inspector hasn't chosen to restore yet.
+  const recoveryPendingRef = useRef(false)
   // Guards against overlapping in-flight saves: without it a slow save could
   // resolve after a newer one and adopt a stale baseline, losing updates.
   const inFlight = useRef(false)
@@ -201,8 +242,11 @@ export function ReportEditor({
       // means a newer edit arrived mid-flight and must not be marked saved.
       savingSeq.current = editSeq.current
       // Manual findings are no longer authored here — the server re-derives auto
-      // findings from Major issues.
-      const patch: ReportPatch = { ...f, critical_findings: [] }
+      // findings from Major issues. OMIT the key entirely (don't send []): the
+      // server's `patch.critical_findings ?? existing.critical_findings` fallback
+      // treats [] as an instruction to drop every stored finding, so sending it
+      // permanently erased legacy hand-authored findings on the first autosave.
+      const patch: ReportPatch = { ...f }
       // Re-arm the debounce so a failed/dropped save retries itself once the
       // connection recovers, instead of sitting unsaved until the next keystroke.
       const armRetry = () => {
@@ -211,11 +255,7 @@ export function ReportEditor({
         }
       }
       try {
-        writerToken.current ??=
-          typeof crypto !== 'undefined' && 'randomUUID' in crypto
-            ? crypto.randomUUID()
-            : `${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`
-        const result = await saveReport(report.id, patch, baselineUpdatedAt.current, writerToken.current)
+        const result = await saveReport(report.id, patch, baselineUpdatedAt.current, ensureWriterToken())
         if (result.ok) {
           // Adopt the new baseline so the next save's precondition matches.
           if (result.updated_at) baselineUpdatedAt.current = result.updated_at
@@ -224,7 +264,13 @@ export function ReportEditor({
             // local backup; its presence on next load is what signals unsaved work.
             dirtyRef.current = false
             try {
-              localStorage.removeItem(DRAFT_KEY)
+              // Only drop OUR OWN backup (or an untagged legacy one). Two tabs
+              // of the same report share this key; when a sibling tab is frozen
+              // on a conflict its edits survive only in this mirror, and our
+              // successful save must not destroy them.
+              const raw = localStorage.getItem(DRAFT_KEY)
+              const tab = raw ? (JSON.parse(raw) as { tab?: string } | null)?.tab : undefined
+              if (!tab || tab === writerToken.current) localStorage.removeItem(DRAFT_KEY)
             } catch {
               /* storage unavailable — nothing to clean up */
             }
@@ -285,22 +331,28 @@ export function ReportEditor({
   // a <Link> navigation within the 1.5s debounce would otherwise drop the last
   // edit and render a stale preview/PDF. Best-effort: we await the save but the
   // caller navigates regardless, so a failed save can't trap the user here.
-  const flush = useCallback(async (): Promise<void> => {
+  // Returns whether everything is persisted, so callers that MUST run against
+  // current server data (Generate AI Summary) can refuse to proceed on a failed
+  // flush instead of silently drafting from a stale snapshot. Navigation
+  // callers ignore the result — a failed save must never trap the user here.
+  const flush = useCallback(async (): Promise<boolean> => {
     if (timer.current) {
       clearTimeout(timer.current)
       timer.current = null
     }
-    if (conflictRef.current) return
+    if (conflictRef.current) return false
     try {
       // Let any in-flight save land first (a coalesced doSave would otherwise
       // return immediately and we'd navigate before the write committed)…
       if (savePromise.current) await savePromise.current
       // …then persist the latest edit if anything is still unsaved, so the
       // preview/PDF renders current data rather than a stale snapshot.
-      if (dirtyRef.current && !conflictRef.current) await doSave()
+      if (dirtyRef.current && !conflictRef.current) return await doSave()
+      return !dirtyRef.current
     } catch {
       // Swallow — navigation proceeds either way; the edit stays dirty and the
       // destination still shows the last persisted state.
+      return false
     }
   }, [doSave])
 
@@ -314,12 +366,21 @@ export function ReportEditor({
     // Mirror the latest form to local storage on every change — synchronous and
     // network-independent, so a reload, crash, force-close or long dead-zone can
     // recover the work even when no server save has succeeded. Written before the
-    // conflict check so edits made during a conflict are backed up too.
-    try {
-      localStorage.setItem(DRAFT_KEY, JSON.stringify({ form, at: Date.now() }))
-    } catch {
-      // Storage full/unavailable (e.g. private mode) — best-effort; the server
-      // save remains the primary path.
+    // conflict check so edits made during a conflict are backed up too. Tagged
+    // with this tab's identity so a sibling tab's save can't delete a backup it
+    // doesn't own. NOT written while the recovery prompt is undecided — the
+    // first keystroke behind the banner must not overwrite the previous
+    // session's draft before the inspector chooses Restore or Discard.
+    if (!recoveryPendingRef.current) {
+      try {
+        localStorage.setItem(
+          DRAFT_KEY,
+          JSON.stringify({ form, at: Date.now(), tab: ensureWriterToken() }),
+        )
+      } catch {
+        // Storage full/unavailable (e.g. private mode) — best-effort; the server
+        // save remains the primary path.
+      }
     }
     // A detected conflict freezes autosave until the page is reloaded.
     if (conflictRef.current) return
@@ -372,7 +433,11 @@ export function ReportEditor({
       const raw = localStorage.getItem(DRAFT_KEY)
       if (!raw) return
       const parsed = JSON.parse(raw) as { form?: Form } | null
-      if (parsed?.form && JSON.stringify(parsed.form) !== JSON.stringify(initialForm)) {
+      // formsEqual, not raw stringify: signed photo URLs and jsonb key order
+      // differ on every load, which made content-identical drafts look like
+      // unsaved work (a false banner after every committed-but-lost save).
+      if (parsed?.form && !formsEqual(parsed.form, initialForm)) {
+        recoveryPendingRef.current = true
         // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time read of a browser-only API (localStorage) on mount
         setRecoverable(parsed.form)
       } else {
@@ -388,11 +453,13 @@ export function ReportEditor({
   // to the server (and a successful save clears the backup).
   function restoreDraft() {
     if (!recoverable) return
+    recoveryPendingRef.current = false
     setForm(recoverable)
     setRecoverable(null)
   }
   // Keep the server copy and drop the local backup.
   function discardDraft() {
+    recoveryPendingRef.current = false
     try {
       localStorage.removeItem(DRAFT_KEY)
     } catch {
@@ -512,7 +579,16 @@ export function ReportEditor({
       )
       return
     }
-    const result = await completeReport(report.id)
+    // Guard the server action like every other network call here: a dropped
+    // request REJECTS, and an unhandled throw would skip setCompleting(false),
+    // wedging the Complete button in its spinning-disabled state until a full
+    // reload — on exactly the flaky connections inspectors are on.
+    let result: Awaited<ReturnType<typeof completeReport>>
+    try {
+      result = await completeReport(report.id)
+    } catch {
+      result = { ok: false, error: 'Could not reach the server. Check your connection and try again.' }
+    }
     setCompleting(false)
     if (!result.ok) {
       setCompleteError(result.error || 'Could not complete the report.')
@@ -530,7 +606,14 @@ export function ReportEditor({
   async function onReopen() {
     setCompleteError(null)
     setCompleting(true)
-    const result = await reopenReport(report.id)
+    // Same rejection guard as onComplete — an unhandled throw would wedge the
+    // button disabled until reload.
+    let result: Awaited<ReturnType<typeof reopenReport>>
+    try {
+      result = await reopenReport(report.id)
+    } catch {
+      result = { ok: false, error: 'Could not reach the server. Check your connection and try again.' }
+    }
     setCompleting(false)
     if (!result.ok) {
       setCompleteError(result.error || 'Could not reopen the report.')

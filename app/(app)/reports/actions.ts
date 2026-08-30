@@ -325,15 +325,23 @@ export async function completeReport(id: string): Promise<SaveResult> {
   // baseline goes stale the moment a report is completed, and EVERY later edit —
   // including freshly-uploaded photos — false-conflicts, freezes autosave and
   // forces a reload (the "photos don't save after completing" bug).
+  // Gated on the VALIDATED snapshot's updated_at: without it a concurrent save
+  // that removes a completion prerequisite (e.g. deletes the last evidence
+  // photo) between the read above and this update would complete a report that
+  // no longer validates. A miss just means "changed mid-completion" — the
+  // inspector taps Complete again against the fresh state.
   const { data, error } = await supabase
     .from('inspection_reports')
     .update({ status: 'completed', completed_at: new Date().toISOString() })
     .eq('id', id)
+    .eq('updated_at', (report as InspectionReport).updated_at)
     .select('updated_at')
     .maybeSingle()
 
   if (error) return { ok: false, error: error.message }
-  if (!data) return { ok: false, error: 'Report not found or access denied.' }
+  if (!data) {
+    return { ok: false, error: 'The report changed while completing. Please try again.' }
+  }
 
   revalidatePath('/reports')
   revalidatePath('/dashboard')
@@ -392,8 +400,16 @@ export async function setReportStatus(
   if (!session) return { ok: false, error: 'Your session has expired. Please sign in again.' }
 
   const supabase = await createClient()
-  const { error } = await supabase.from('inspection_reports').update({ status }).eq('id', id)
+  // select() so an RLS-filtered 0-row update (not the caller's report) reads as
+  // the failure it is, instead of a silent { ok: true } that changed nothing.
+  const { data, error } = await supabase
+    .from('inspection_reports')
+    .update({ status })
+    .eq('id', id)
+    .select('id')
+    .maybeSingle()
   if (error) return { ok: false, error: error.message }
+  if (!data) return { ok: false, error: 'Report not found or access denied.' }
   revalidatePath('/reports')
   return { ok: true }
 }
@@ -426,6 +442,42 @@ export async function deleteReport(id: string): Promise<{ ok: boolean; error?: s
   const supabase = await createClient()
   const { error } = await supabase.rpc('delete_report_renumber', { p_report_id: id })
   if (error) return { ok: false, error: error.message }
+
+  // The DB row is gone; now purge the report's storage. Without this every
+  // cached PDF version and inspection photo (customer name, phone, VIN, car
+  // photos) lived on in the private buckets forever — no other path ever
+  // cleans a deleted report's objects (the PDF sweep only runs for reports
+  // that still exist). Best-effort: the delete already succeeded, so log and
+  // move on rather than failing the action over storage hiccups.
+  try {
+    const { createServiceClient } = await import('@/lib/supabase/server')
+    const { REPORT_PDF_BUCKET } = await import('@/lib/pdf-cache')
+    const { PHOTO_BUCKET } = await import('@/lib/utils')
+    const svc = createServiceClient()
+    // Both buckets nest at most two levels under the report id:
+    // report-pdfs: {id}/{version}/{ref}.pdf plus legacy flat {id}/{version}.pdf
+    // report-photos: {id}/{folder}/{uuid}.{ext}
+    for (const bucket of [REPORT_PDF_BUCKET, PHOTO_BUCKET]) {
+      const { data: top } = await svc.storage.from(bucket).list(id, { limit: 1000 })
+      const paths: string[] = []
+      for (const entry of top ?? []) {
+        if (entry.id) {
+          paths.push(`${id}/${entry.name}`)
+        } else {
+          const { data: nested } = await svc.storage
+            .from(bucket)
+            .list(`${id}/${entry.name}`, { limit: 1000 })
+          for (const f of nested ?? []) paths.push(`${id}/${entry.name}/${f.name}`)
+        }
+      }
+      if (paths.length) {
+        const { error: rmErr } = await svc.storage.from(bucket).remove(paths)
+        if (rmErr) console.error(`[deleteReport] purge failed for ${bucket}`, rmErr)
+      }
+    }
+  } catch (e) {
+    console.error('[deleteReport] storage purge failed', e)
+  }
 
   revalidatePath('/reports')
   revalidatePath('/dashboard')

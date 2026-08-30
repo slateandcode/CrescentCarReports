@@ -26,7 +26,7 @@ import type {
 } from '@/lib/report-types'
 import type { ResolvedTemplate, SectionDef } from '@/lib/report-templates'
 import { getTemplate } from '@/lib/report-templates'
-import { brandConfig, reportBrand } from '@/lib/report-brand'
+import { brandConfig, effectiveBrand } from '@/lib/report-brand'
 import {
   computeCounts,
   sectionCounts,
@@ -268,10 +268,14 @@ function EmptySection({ label }: { label: string }) {
 /**
  * Split a section's graded items (template order) into:
  *   issues       Minor / Major items (detailed cards)
- *   passEvidence Pass / N/A items that carry evidence photos (compact card)
- *   passes       Pass / N/A items with no photos (chip list)
+ *   passEvidence Pass / N/A items that carry evidence photos, plus EVERY
+ *                explicit N/A item (compact card with its true status badge)
+ *   passes       Pass items with no photos (chip list, hard-coded Pass badge)
  * Pass items can legitimately carry evidence (e.g. OBD scan, battery test, AC
- * reading), so their photos must surface in the customer report too.
+ * reading), so their photos must surface in the customer report too. N/A items
+ * (legacy rows — the current editor can't set N/A) must NEVER land in `passes`:
+ * PassList badges every row green "Pass", which told the customer a check
+ * passed when it was recorded not-applicable.
  */
 function splitItems(report: InspectionReport, section: SectionDef) {
   const state = report.checklist?.[section.id] || {}
@@ -286,7 +290,8 @@ function splitItems(report: InspectionReport, section: SectionDef) {
     // assessed"). Issue/evidence branches only fire when `st` is present.
     const status = effectiveStatus(st)
     if (st && isIssue(status)) issues.push({ title: item.title, state: st })
-    else if (st && (st.photos?.length ?? 0) > 0) passEvidence.push({ title: item.title, state: st })
+    else if (st && ((st.photos?.length ?? 0) > 0 || itemStatus(st) === 'na'))
+      passEvidence.push({ title: item.title, state: st })
     else passes.push(item.title)
   }
   return { issues, passEvidence, passes, graded: issues.length + passEvidence.length + passes.length }
@@ -697,7 +702,16 @@ export function ReportVehicleSummaryPage({
               <DocField label="Customer name" value={report.customer_name} />
               <DocField label="Customer phone" value={report.customer_phone} />
               <DocField label="Customer email" value={report.customer_email} />
-              <DocField label="Report status" value={report.status === 'completed' ? 'Completed' : 'Draft'} />
+              <DocField
+                label="Report status"
+                value={
+                  report.status === 'completed'
+                    ? 'Completed'
+                    : report.status === 'archived'
+                      ? 'Archived'
+                      : 'Draft'
+                }
+              />
             </div>
           </div>
         </div>
@@ -898,7 +912,7 @@ export function ScoredSectionPage({
   }
 
   const chunks = paginateSectionBlocks(buildSectionBlocks({ issues, passEvidence, passes }), {
-    headerExtraMm: headerExtraMm(reportBrand(report)),
+    headerExtraMm: headerExtraMm(effectiveBrand(report)),
   })
   return chunks.map((chunk, ci) => (
     <DocPage key={ci}>
@@ -942,7 +956,7 @@ export function ReportAccidentHistoryPage({ report, index }: { report: Inspectio
   // on page 1 (continuation pages skip it).
   const chunks = paginateSectionBlocks(buildSectionBlocks({ issues, passEvidence, passes }), {
     leadMm: 26,
-    headerExtraMm: headerExtraMm(reportBrand(report)),
+    headerExtraMm: headerExtraMm(effectiveBrand(report)),
   })
   return chunks.map((chunk, ci) => (
     <DocPage key={ci}>
@@ -1021,7 +1035,7 @@ export function ReportExteriorPage({ report, index }: { report: InspectionReport
   const exteriorBlocks = buildSectionBlocks({ issues, passEvidence, passes })
   const [firstChunk = [], ...contChunks] = paginateSectionBlocks(exteriorBlocks, {
     leadMm: 110,
-    headerExtraMm: headerExtraMm(reportBrand(report)),
+    headerExtraMm: headerExtraMm(effectiveBrand(report)),
   })
   const firstCol = splitChunk(firstChunk)
 
@@ -1170,7 +1184,11 @@ export function ReportTyresBrakesPage({ report, index }: { report: InspectionRep
     { id: 'tyre-rr', rim: 'rim-rr', label: 'Rear Right' },
   ]
 
-  const brakeIds = ['brake-pads', 'brake-discs', 'brake-vibration']
+  // EVERY brake item in the template must be listed here — an id missing from
+  // this list is counted and scored but never rendered on any page (the Premium
+  // brake-disc-wear check was invisible in the customer document for this
+  // exact reason: photos required by validation, yet nowhere to print).
+  const brakeIds = ['brake-pads', 'brake-discs', 'brake-disc-wear', 'brake-vibration']
   const brakeItems = section.items.filter((it) => brakeIds.includes(it.id) && itemStatus(state[it.id]))
 
   // The corner-card grid + brakes share the right column; estimate how much the
@@ -1178,7 +1196,8 @@ export function ReportTyresBrakesPage({ report, index }: { report: InspectionRep
   // page instead of clipping (the "brake photo cut in half" bug).
   const cornerCardMm = (c: { id: string; rim: string }) => {
     const photos = (state[c.id]?.photos?.length ?? 0) + (state[c.rim]?.photos?.length ?? 0)
-    return 24 + photos * 28 + (itemComment(state[c.id]) ? 6 : 0) // narrow card → ~1 photo per row
+    // narrow card → ~1 photo per row; tyre + rim comments each add a line or two
+    return 24 + photos * 28 + (itemComment(state[c.id]) ? 6 : 0) + (itemComment(state[c.rim]) ? 6 : 0)
   }
   const cornerBlockMm =
     8 +
@@ -1193,7 +1212,7 @@ export function ReportTyresBrakesPage({ report, index }: { report: InspectionRep
   const brakeChunks =
     brakeBlocks.length > 0 ? paginateSectionBlocks(brakeBlocks, {
           leadMm: cornerBlockMm + 10,
-          headerExtraMm: headerExtraMm(reportBrand(report)),
+          headerExtraMm: headerExtraMm(effectiveBrand(report)),
         })
       : [[]]
   const firstBrakes = splitChunk(brakeChunks[0]).evidence
@@ -1255,6 +1274,10 @@ function CornerTyreCard({ label, tyre, rim }: { label: string; tyre?: ChecklistI
   const tStatus = itemStatus(tyre)
   const rStatus = itemStatus(rim)
   const comment = itemComment(tyre)
+  // The rim's own comment ("Minor rim curb rash was observed…") must print too —
+  // without it a rim issue showed only a bare status label and an unexplained
+  // photo (a Minor rim's description appeared nowhere in the whole document).
+  const rimComment = itemComment(rim)
   return (
     <div className="avoid-break rounded-xl border border-doc-border bg-doc-surface p-3">
       <div className="flex items-center justify-between gap-2">
@@ -1272,6 +1295,9 @@ function CornerTyreCard({ label, tyre, rim }: { label: string; tyre?: ChecklistI
         )}
       </div>
       {comment && <p className="mt-1.5 text-[11px] leading-snug text-doc-ink">{comment}</p>}
+      {rimComment && rimComment !== comment && (
+        <p className="mt-1 text-[11px] leading-snug text-doc-ink">{rimComment}</p>
+      )}
       {/* Merge the corner's tyre + rim photos, de-duped by id so a single uploaded
           wheel photo can never render twice (brief item 6 — the Lexus LS250 glitch). */}
       <ItemPhotos
@@ -1329,7 +1355,7 @@ export function ReportEndoscopicPage({ report, index }: { report: InspectionRepo
   }))
   const chunks = paginateSectionBlocks(blocks, {
     firstMm: SECTION_CONT_MM,
-    headerExtraMm: headerExtraMm(reportBrand(report)),
+    headerExtraMm: headerExtraMm(effectiveBrand(report)),
   })
   return chunks.map((chunk, ci) => (
     <DocPage key={ci}>
@@ -1376,7 +1402,7 @@ export function ReportPhotoGalleryPage({
     )
   }
 
-  const chunks = paginatePhotos(photos, { headerExtraMm: headerExtraMm(reportBrand(report)) })
+  const chunks = paginatePhotos(photos, { headerExtraMm: headerExtraMm(effectiveBrand(report)) })
   return chunks.map((chunk, ci) => (
     <DocPage key={ci}>
       <DocHeader label="Photo Gallery" />
@@ -1463,7 +1489,7 @@ export function ReportFinalNotesPage({
     firstMm: SECTION_CONT_MM - (showRec ? 34 : 0),
     contMm: SECTION_CONT_MM,
     issuedMm: 30,
-    headerExtraMm: headerExtraMm(reportBrand(report)),
+    headerExtraMm: headerExtraMm(effectiveBrand(report)),
   })
 
   return pages.map((page, pi) => (

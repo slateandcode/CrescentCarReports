@@ -59,8 +59,11 @@ export function itemComment(state?: ChecklistItemState | null): string {
 export function itemNote(state?: ChecklistItemState | null): string {
   if (!state) return ''
   const note = (state.notes ?? '').trim()
-  const comment = (state.comment ?? '').trim()
-  return note && note !== comment ? note : ''
+  // Compare against the DISPLAYED comment (which falls back to notes), not the
+  // raw comment field: on a legacy notes-only item the two are the same text,
+  // and comparing against the empty raw comment printed it twice — once as the
+  // comment and again as "Inspector note: …".
+  return note && note !== itemComment(state) ? note : ''
 }
 
 /** Ordinal suffix for a small positive integer (1→"1st", 2→"2nd", 3→"3rd"…). */

@@ -1,6 +1,6 @@
 'use client'
 
-import { memo, useCallback, useRef } from 'react'
+import { memo, useCallback, useEffect, useRef } from 'react'
 import { AlertTriangle, Camera, Wand2 } from 'lucide-react'
 import type { ChecklistItemDef } from '@/lib/report-templates'
 import type { ChecklistItemState, ChecklistStatus, PhotoRef } from '@/lib/report-types'
@@ -58,6 +58,14 @@ function ChecklistItemCardImpl({
   // comments are saved too, so checking presence would wrongly lock regeneration
   // on every reloaded draft.
   const manualRef = useRef<boolean>(state.commentManual === true)
+  // Re-sync when the item is swapped from OUTSIDE this card — restoring a
+  // localStorage draft replaces the whole form without remounting cards, and a
+  // stale `false` here would let the next status/chip tap regenerate over a
+  // restored hand-written comment. Every in-card mutation writes the flag and
+  // the ref together, so this only ever corrects external swaps.
+  useEffect(() => {
+    manualRef.current = state.commentManual === true
+  }, [state.commentManual])
 
   function regen(next: ChecklistItemState): string {
     const s = itemStatus(next)
@@ -94,16 +102,21 @@ function ChecklistItemCardImpl({
   function setAffectedArea(affectedArea: string) {
     commit({ ...state, affectedArea })
   }
+  // setComment/setNotes are ALSO called asynchronously (PolishButton resolves its
+  // fetch seconds after the tap), so like the photo mutations below they must
+  // merge via the functional updater — writing the render-time `state` closure
+  // here reverted anything that changed while the polish was in flight, most
+  // visibly wiping a just-uploaded photo off the item.
   function setComment(comment: string) {
     manualRef.current = comment.trim().length > 0
-    onChange({ ...state, comment, commentManual: manualRef.current })
+    onChange((prev) => ({ ...prev, comment, commentManual: comment.trim().length > 0 }))
   }
   function regenerate() {
     manualRef.current = false
     onChange({ ...state, comment: regen(state), commentManual: false })
   }
   function setNotes(notes: string) {
-    onChange({ ...state, notes })
+    onChange((prev) => ({ ...prev, notes }))
   }
   function setTyre(field: 'tyreManufacturer' | 'tyreDate' | 'tread', value: string) {
     onChange({ ...state, [field]: value })

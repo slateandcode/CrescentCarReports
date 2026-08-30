@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getSessionUser } from '@/lib/auth'
+import { allowAiCall } from '@/lib/ai-rate-limit'
 import { createClient } from '@/lib/supabase/server'
 import { IS_DEMO } from '@/lib/env'
 import { getTemplate } from '@/lib/report-templates'
@@ -114,6 +115,18 @@ export async function POST(req: NextRequest) {
   const session = await getSessionUser()
   if (!session) {
     return NextResponse.json({ error: 'Not signed in.' }, { status: 401 })
+  }
+
+  // Same two gates as polish-comment: JSON content type (forces a CORS
+  // preflight on any cross-origin caller) and a per-user cap on paid AI calls.
+  if (!req.headers.get('content-type')?.toLowerCase().includes('application/json')) {
+    return NextResponse.json({ error: 'Invalid request.' }, { status: 415 })
+  }
+  if (!(await allowAiCall(session.id, 'summary'))) {
+    return NextResponse.json(
+      { error: 'Too many AI requests — please wait a few minutes and try again.' },
+      { status: 429 },
+    )
   }
 
   const apiKey = process.env.GROQ_API_KEY

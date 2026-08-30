@@ -26,12 +26,15 @@ const ACK_TIMEOUT_MS = 5000
  * can serve the newest cached copy) if this didn't run, e.g. in local dev where
  * there's no Netlify functions runtime.
  */
-export async function triggerPdfPrerender(id: string, originFallback?: string): Promise<void> {
+export async function triggerPdfPrerender(id: string): Promise<void> {
   const secret = process.env.PDF_TOKEN_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY
-  const base = (process.env.NEXT_PUBLIC_APP_URL || process.env.URL || originFallback || '').replace(
-    /\/$/,
-    '',
-  )
+  // ENV-derived origins only. This request carries the shared secret in its
+  // body, and a request-derived origin fallback (nextUrl.origin) is built from
+  // spoofable Host/X-Forwarded-Host headers — on any host where URL isn't set
+  // that would let a crafted request exfiltrate the secret. Netlify always sets
+  // URL, so skipping the prerender when neither env exists costs nothing there
+  // (and local dev has no functions runtime anyway).
+  const base = (process.env.NEXT_PUBLIC_APP_URL || process.env.URL || '').replace(/\/$/, '')
   if (!secret || !base) return
   try {
     await fetch(`${base}/.netlify/functions/render-report-pdf-background`, {

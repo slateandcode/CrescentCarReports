@@ -211,11 +211,17 @@ export async function getReportWithInspectorAdmin(
     return report ? { report, inspectorName: DEMO_PROFILE.full_name } : null
   }
   const supabase = createServiceClient()
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('inspection_reports')
     .select('*, inspector:inspector_profiles(full_name)')
     .eq('id', id)
     .maybeSingle()
+  // A transient DB/network error must NOT read as "report doesn't exist": the
+  // caller (/render) turns null into notFound(), and before the renderers
+  // validated the page a background render would faithfully PDF that 404 and
+  // cache it as the report. Throw instead — a 500 render is rejected and the
+  // cache keeps its last good copy.
+  if (error) throw new Error(`report load failed: ${error.message}`)
   if (!data) return null
   const { inspector, ...report } = data as InspectionReport & {
     inspector: { full_name: string } | null
@@ -223,7 +229,10 @@ export async function getReportWithInspectorAdmin(
   // Bucket is private (migration 013): re-sign every photo url from its path. The
   // service-role client bypasses RLS, so it can sign any report's photos — this
   // is what lets the cookie-less headless-Chrome PDF render load the images.
-  const signed = await signReportPhotos(supabase, report as InspectionReport)
+  // STRICT: a wholesale signing failure here would render every photo blank and
+  // cache that photo-less PDF permanently for this version — fail the render
+  // instead (the interactive editor/preview path stays lenient).
+  const signed = await signReportPhotos(supabase, report as InspectionReport, { strict: true })
   return { report: signed, inspectorName: inspector?.full_name ?? null }
 }
 

@@ -30,7 +30,8 @@ export function FinalRecommendationForm({
 }: {
   reportId: string
   /** Persist any pending editor edits before the AI summary reads server-side data. */
-  onFlush?: () => Promise<void>
+  /** See GenerateSummaryButton: resolves false when the flush couldn't persist. */
+  onFlush?: () => Promise<boolean>
   values: {
     buyer_recommendation: string | null
     inspector_summary: string | null

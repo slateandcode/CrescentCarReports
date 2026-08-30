@@ -114,7 +114,18 @@ export async function renderUrlToPdf(
     // every image's decode so no photo paints half-drawn in the PDF (the report's
     // <img> are eager, so decode resolves promptly; failures are swallowed so one
     // broken signed URL can't abort the whole render).
-    await page.goto(target, { waitUntil: 'load', timeout: timeoutMs })
+    const response = await page.goto(target, { waitUntil: 'load', timeout: timeoutMs })
+    // page.goto resolves normally on HTTP 404/500 (it only rejects on network
+    // errors), so without these checks an expired render token or a transient
+    // error page would be faithfully rendered to PDF — and then cached as the
+    // report and its good older versions swept. Fail loudly instead; callers
+    // already handle a rejected render gracefully.
+    if (response && !response.ok()) {
+      throw new Error(`render page returned HTTP ${response.status()}`)
+    }
+    if (!(await page.$('[data-report-document]'))) {
+      throw new Error('render page did not contain the report document')
+    }
     await page.evaluate(async () => {
       const imgs = Array.from(document.images)
       // Defeat loading="lazy" for the one-shot render: force eager and ensure each

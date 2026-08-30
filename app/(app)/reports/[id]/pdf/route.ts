@@ -200,7 +200,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   // even if the live render below dies on a serverless cold start, the cache
   // heals within a minute or two and the next click downloads instantly.
   const origin = _req.nextUrl.origin
-  if (!IS_DEMO) await triggerPdfPrerender(id, origin)
+  if (!IS_DEMO) await triggerPdfPrerender(id)
 
   // 2) Cache miss — render now (works when the function is warm), cache it, then
   // redirect to the freshly-cached copy. The rendered bytes are uploaded to

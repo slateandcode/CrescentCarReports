@@ -56,9 +56,17 @@ function collectPhotoRefs(report: InspectionReport): PhotoRef[] {
   return refs
 }
 
+/**
+ * `strict`: throw on a WHOLESALE signing failure (the batch call itself errors)
+ * instead of silently returning the report with expired urls. Used by the PDF
+ * render path, where "every photo blank" must fail the render rather than be
+ * cached as the report's PDF. Per-path failures (one bad object) stay lenient
+ * in both modes.
+ */
 export async function signReportPhotos<T extends InspectionReport>(
   supabase: SupabaseClient,
   report: T,
+  { strict = false }: { strict?: boolean } = {},
 ): Promise<T> {
   try {
     const refs = collectPhotoRefs(report)
@@ -84,6 +92,7 @@ export async function signReportPhotos<T extends InspectionReport>(
       .createSignedUrls(pathList, SIGNED_URL_TTL_SECONDS)
     if (error || !data) {
       console.error('[signReportPhotos] batch sign failed', error)
+      if (strict) throw new Error(`photo signing failed: ${error?.message ?? 'no data'}`)
       return report
     }
 
@@ -112,6 +121,9 @@ export async function signReportPhotos<T extends InspectionReport>(
     return report
   } catch (e) {
     // A broken signer must NEVER 500 the report — fall back to the stored urls.
+    // Except in strict (PDF-render) mode, where a photo-less render being cached
+    // is worse than a failed render.
+    if (strict) throw e
     console.error('[signReportPhotos] unexpected error', e)
     return report
   }

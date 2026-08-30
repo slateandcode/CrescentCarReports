@@ -1,6 +1,6 @@
 import type { InspectionReport } from '@/lib/report-types'
 import { getTemplate } from '@/lib/report-templates'
-import { brandConfig, reportBrand } from '@/lib/report-brand'
+import { brandConfig, effectiveBrand } from '@/lib/report-brand'
 import {
   ReportCoverPage,
   ReportAlphaCoverPage,
@@ -33,7 +33,7 @@ export function ReportDocument({
   const template = getTemplate(report.package_type)
   // Whose document this is. White-label (hide_branding) still wins over a brand:
   // "show no identity" is a stronger instruction than "show theirs".
-  const brand = report.hide_branding ? 'crescent' : reportBrand(report)
+  const brand = effectiveBrand(report)
   const { disclaimerPage } = report.hide_branding ? { disclaimerPage: true } : brandConfig(report)
   const present = new Set(template.sections.map((s) => s.id))
   const hasNotes = Boolean(report.inspector_summary || report.price_negotiation_notes)
@@ -88,7 +88,13 @@ export function ReportDocument({
     // (DocHeader/DocFooter/watermark — see globals.css), including re-pointing
     // --accent-rgb for the whole document. Pages that hold the report branch in
     // JSX themselves.
+    // data-report-document is the render-success marker: the PDF renderers check
+    // for it after page load so a 404/error/login page can never be rendered to
+    // PDF, cached as this report's document and (worse) trigger the stale-version
+    // sweep that deletes the good older copies. Keep it on the root of every
+    // brand/white-label variant.
     <div
+      data-report-document=""
       className={`report-doc bg-[#3A3A3A] print:bg-white${report.hide_branding ? ' report-doc--unbranded' : ''}${brand === 'alpha' ? ' report-doc--alpha' : ''}`}
     >
       {brand === 'alpha' ? (

@@ -130,8 +130,9 @@ export function StickyReportActions({
   onReopen: () => void
   /** Flush pending autosave changes before an action that renders server state —
    *  the Preview link AND the Download button both use it, so neither can show a
-   *  stale pre-debounce snapshot. Awaited, but the action proceeds regardless. */
-  onNavigate?: () => Promise<void>
+   *  stale pre-debounce snapshot. Awaited, but the action proceeds regardless
+   *  (the result — flush success — is ignored here, hence Promise<unknown>). */
+  onNavigate?: () => Promise<unknown>
   customerPhone?: string | null
   vehicleLabel: string
 }) {

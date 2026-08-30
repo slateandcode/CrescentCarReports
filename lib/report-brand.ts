@@ -75,4 +75,17 @@ export function brandConfig(report: Pick<InspectionReport, 'report_brand'>): Bra
   return BRANDS[reportBrand(report)]
 }
 
+/**
+ * The brand the document is ACTUALLY rendered in, with white-label applied:
+ * hide_branding wins over any brand ("show no identity" beats "show theirs"),
+ * falling back to the neutral crescent chrome. Use this — not reportBrand() —
+ * wherever layout depends on which header/chrome really renders (pagination
+ * budgets); ReportDocument makes the same call for the visual swap.
+ */
+export function effectiveBrand(
+  report: Pick<InspectionReport, 'report_brand' | 'hide_branding'>,
+): ReportBrand {
+  return report.hide_branding ? 'crescent' : reportBrand(report)
+}
+
 export const VALID_BRANDS: ReportBrand[] = ['crescent', 'alpha']

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getSessionUser } from '@/lib/auth'
+import { allowAiCall } from '@/lib/ai-rate-limit'
 import {
   GROQ_ENDPOINT,
   GROQ_MODEL,
@@ -41,6 +42,24 @@ export async function POST(req: NextRequest) {
   const session = await getSessionUser()
   if (!session) {
     return NextResponse.json({ error: 'Not signed in.' }, { status: 401 })
+  }
+
+  // Require the JSON content type our own client always sends. Cross-origin,
+  // a JSON content type makes the request non-"simple", forcing a CORS
+  // preflight this route never approves — so a third-party page can't ride an
+  // inspector's session cookie into paid Groq calls (the body parser itself
+  // never cared about the header, which is what left that door open).
+  if (!req.headers.get('content-type')?.toLowerCase().includes('application/json')) {
+    return NextResponse.json({ error: 'Invalid request.' }, { status: 415 })
+  }
+
+  // Per-user cap — the session gate alone left the shared Groq quota drainable
+  // by a single looping account.
+  if (!(await allowAiCall(session.id, 'polish'))) {
+    return NextResponse.json(
+      { error: 'Too many AI requests — please wait a few minutes and try again.' },
+      { status: 429 },
+    )
   }
 
   const apiKey = process.env.GROQ_API_KEY

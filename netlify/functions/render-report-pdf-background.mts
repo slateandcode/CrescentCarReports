@@ -12,7 +12,7 @@
 import puppeteer from 'puppeteer-core'
 import chromium from '@sparticuz/chromium-min'
 import { createClient } from '@supabase/supabase-js'
-import { createHmac } from 'node:crypto'
+import { createHmac, timingSafeEqual } from 'node:crypto'
 // Share the cache path/name logic with the download route so the pre-render writes
 // to exactly the path the route reads from — any drift here is a silent permanent
 // cache miss (the very bug class this cache exists to avoid).
@@ -34,7 +34,13 @@ const handler = async (req: Request): Promise<Response> => {
   } catch {
     /* empty body */
   }
-  if (body.auth !== secret) return new Response('forbidden', { status: 403 })
+  // Constant-time compare (length pre-check leaks only the length, which is not
+  // secret) — same discipline as lib/pdf-token.ts for the render token.
+  const authBuf = Buffer.from(String(body.auth ?? ''))
+  const secretBuf = Buffer.from(secret)
+  if (authBuf.length !== secretBuf.length || !timingSafeEqual(authBuf, secretBuf)) {
+    return new Response('forbidden', { status: 403 })
+  }
   const reportId = body.reportId
   if (!reportId) return new Response('missing reportId', { status: 400 })
 
@@ -106,13 +112,18 @@ const handler = async (req: Request): Promise<Response> => {
     return new Response('already cached')
   }
 
-  // Mint the same short-lived render token the /render page verifies.
-  const exp = Date.now() + 5 * 60 * 1000
-  const sig = createHmac('sha256', secret).update(`${reportId}.${exp}`).digest('base64url')
-  const token = `${exp}.${sig}`
   const siteUrl = (process.env.NEXT_PUBLIC_APP_URL || process.env.URL || '').replace(/\/$/, '')
   if (!siteUrl) return new Response('no site url', { status: 500 })
-  const target = `${siteUrl}/render/${reportId}?pdf=${encodeURIComponent(token)}`
+  // Mint the same short-lived render token the /render page verifies. A THUNK,
+  // resolved only after Chromium has launched: the cold-start pack download can
+  // take minutes, and minting the 5-minute token before it risked navigating
+  // with an already-expired token → /render 404s and the run is wasted (the
+  // route path fixed this the same way; see lib/pdf.ts renderUrlToPdf).
+  const target = () => {
+    const exp = Date.now() + 5 * 60 * 1000
+    const sig = createHmac('sha256', secret).update(`${reportId}.${exp}`).digest('base64url')
+    return `${siteUrl}/render/${reportId}?pdf=${encodeURIComponent(`${exp}.${sig}`)}`
+  }
 
   // Launch is guarded separately from the render: fetching the ~66MB Chromium pack
   // is the most common failure here, and when it threw out of the handler it did so
@@ -132,7 +143,19 @@ const handler = async (req: Request): Promise<Response> => {
   }
   try {
     const page = await browser.newPage()
-    await page.goto(target, { waitUntil: 'load', timeout: 90000 })
+    const response = await page.goto(target(), { waitUntil: 'load', timeout: 90000 })
+    // page.goto resolves normally on HTTP 404/500, so without these checks an
+    // expired token or transient error page would be rendered to PDF, uploaded
+    // as this version's cache entry, and the sweep below would then delete the
+    // good older copies. Bail out instead — the cache keeps its last good PDF.
+    if (response && !response.ok()) {
+      console.error('[render-report-pdf-background] render page returned', response.status())
+      return new Response('render page error', { status: 500 })
+    }
+    if (!(await page.$('[data-report-document]'))) {
+      console.error('[render-report-pdf-background] no report document on render page')
+      return new Response('render page did not contain the report', { status: 500 })
+    }
     await page.evaluate(async () => {
       const imgs = Array.from(document.images)
       await Promise.all(

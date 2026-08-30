@@ -19,8 +19,10 @@ export function GenerateSummaryButton({
 }: {
   reportId: string
   /** Persist pending editor edits first — the API drafts from server-side data, so
-   *  without this a finding entered within the autosave window is silently omitted. */
-  onFlush?: () => Promise<void>
+   *  without this a finding entered within the autosave window is silently omitted.
+   *  Resolves false when the flush could not persist everything (dead zone,
+   *  conflict): generation is aborted rather than drafting from stale data. */
+  onFlush?: () => Promise<boolean>
   onGenerated: (summary: string) => void
   className?: string
 }) {
@@ -34,7 +36,11 @@ export function GenerateSummaryButton({
     try {
       // Flush unsaved edits so the summary reflects what's on screen, not the last
       // autosaved snapshot (mirrors the Preview/Complete flush-before-action pattern).
-      await onFlush?.()
+      // A failed flush must ABORT: generating anyway would produce a plausible
+      // summary that silently omits the newest findings.
+      if (onFlush && !(await onFlush())) {
+        throw new Error('Could not save your latest changes — check your connection and try again.')
+      }
       const res = await fetch('/api/generate-summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
