@@ -147,6 +147,12 @@ export function ReportEditor({
   // so a normal run of saves from THIS editor keeps matching. A mismatch means
   // someone else saved → the server returns { conflict: true }.
   const baselineUpdatedAt = useRef(report.updated_at)
+  // Random per-mount identity sent with every save. Lets the server tell "my
+  // own save committed but its reply was lost on flaky mobile data" (self-heal
+  // silently) apart from "another tab/user saved" (genuine conflict). A second
+  // tab of the same report gets its own token, so real conflicts still surface.
+  // Created lazily on the first save — render must stay pure (react-hooks/purity).
+  const writerToken = useRef<string | null>(null)
   // Guards against overlapping in-flight saves: without it a slow save could
   // resolve after a newer one and adopt a stale baseline, losing updates.
   const inFlight = useRef(false)
@@ -205,7 +211,11 @@ export function ReportEditor({
         }
       }
       try {
-        const result = await saveReport(report.id, patch, baselineUpdatedAt.current)
+        writerToken.current ??=
+          typeof crypto !== 'undefined' && 'randomUUID' in crypto
+            ? crypto.randomUUID()
+            : `${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`
+        const result = await saveReport(report.id, patch, baselineUpdatedAt.current, writerToken.current)
         if (result.ok) {
           // Adopt the new baseline so the next save's precondition matches.
           if (result.updated_at) baselineUpdatedAt.current = result.updated_at
@@ -913,6 +923,10 @@ export function ReportEditor({
                 Reload
               </button>{' '}
               to get the latest version.
+            </p>
+            <p className="mt-1 text-xs">
+              Don&apos;t worry — your work is backed up on this device. After reloading you&apos;ll
+              be offered to restore anything that wasn&apos;t saved yet.
             </p>
           </div>
         )}
