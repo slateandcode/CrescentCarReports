@@ -13,9 +13,10 @@
 export type PackageType = 'standard' | 'comprehensive' | 'premium'
 export type ReportStatus = 'draft' | 'completed' | 'archived'
 
-/** Whose document this is (migration 022). Independent of `package_type`:
- *  an Alpha report is a Premium inspection wearing Alpha Worldwide's identity. */
-export type ReportBrand = 'crescent' | 'alpha'
+/** Whose document this is (migrations 022, 041). Independent of `package_type`:
+ *  an Alpha or Cash & Cars report is a Premium inspection wearing the reseller's
+ *  identity. */
+export type ReportBrand = 'crescent' | 'alpha' | 'cashandcars'
 
 /** Canonical inspection statuses (brief: Pass / Minor Issue / Major Issue). */
 export type ChecklistStatus = 'pass' | 'minor' | 'major' | 'na'

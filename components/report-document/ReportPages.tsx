@@ -17,6 +17,8 @@ import {
   Cylinder,
   Info,
   UserRound,
+  Mail,
+  Phone,
 } from 'lucide-react'
 import type {
   InspectionReport,
@@ -66,6 +68,7 @@ import {
   RecommendationBadge,
   DocImg,
   ALPHA_NAVY,
+  CASHCARS_CHARCOAL,
 } from './DocPrimitives'
 import { HealthGauge } from './ReportDonutChart'
 import {
@@ -590,6 +593,105 @@ export function ReportAlphaCoverPage() {
           Driven by <span className="text-accent">Trust</span>. Backed by{' '}
           <span className="text-accent">Detail</span>.
         </p>
+      </div>
+    </DocPage>
+  )
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Page 1: Cover — Cash & Cars
+// ════════════════════════════════════════════════════════════════════════
+/**
+ * Cash & Cars' cover, composed from the letterhead they supplied (they sent no
+ * cover artwork): logo top-left, the whole logo ghosted
+ * large behind the page, contact rows over a charcoal foot band that rises on
+ * the right with the letterhead's curve.
+ *
+ * Like the Alpha cover it is a fixed poster and takes no report, and it shares
+ * Alpha's car placement and headline block — that placement was position-swept
+ * so the black headline type ends on the bright headlight area, and it holds
+ * for any brand on a white field.
+ */
+export function ReportCashCarsCoverPage() {
+  return (
+    <DocPage className="overflow-hidden">
+      {/* The letterhead's centred ghost logo, moved up beside the logo row:
+          centred, it would sit behind the car. Box keeps the asset's
+          1400 × 482 aspect. */}
+      <span className="pointer-events-none absolute right-[-70px] top-[60px] block h-[172px] w-[500px] opacity-[0.06]">
+        <DocImg src="/cash-and-cars.png" className="object-contain" />
+      </span>
+
+      {/* Same seat as the Alpha cover car — see ReportAlphaCoverPage. */}
+      <div
+        className="absolute right-[-376px] top-[346px] h-[503px] w-[719px]"
+        style={{
+          WebkitMaskImage: CAR_GROUND_FADE,
+          maskImage: CAR_GROUND_FADE,
+        }}
+      >
+        <DocImg src="/cover-car.png" className="object-contain" />
+      </div>
+
+      <div className="relative px-14 pt-[56px]">
+        <span className="relative block h-[117px] w-[340px]">
+          <DocImg src="/cash-and-cars.png" alt="Cash & Cars" className="object-contain object-left" />
+        </span>
+      </div>
+
+      {/* Headline lands at the same height as on the Alpha cover, so the car
+          seat shared with it still puts "INVEST." on the headlight. */}
+      <div className="relative mt-[186px] px-14">
+        <div className="h-[4px] w-12 rounded-full bg-accent" />
+        <p
+          className="mt-8 text-[12px] font-bold uppercase tracking-[0.34em]"
+          style={{ color: CASHCARS_CHARCOAL }}
+        >
+          Vehicle Inspection Report
+        </p>
+        <h1 className="mt-5 text-[62px] font-black italic uppercase leading-[1.1] tracking-tight text-doc-ink">
+          <span className="block">Inspect</span>
+          <span className="block text-accent">Before</span>
+          <span className="block">You Invest.</span>
+        </h1>
+        <p className="mt-7 text-[14px] font-medium text-doc-muted">
+          Buy With Confidence and Avoid Hidden Surprises!
+        </p>
+        <div className="mt-9 h-[4px] w-12 rounded-full bg-accent" />
+      </div>
+
+      {/* The letterhead's foot: contact rows on white, a charcoal strip along
+          the bottom edge that rises into a taller block on the right. */}
+      <div className="relative mt-auto">
+        <div className="grid w-fit grid-cols-[auto_auto] gap-x-9 gap-y-3.5 whitespace-nowrap px-14 pb-7 text-[13px] font-medium text-doc-ink">
+          <span className="flex items-center gap-2.5">
+            <MapPin size={16} className="text-accent" />
+            Al Quoz Industrial Area 3
+          </span>
+          <span className="flex items-center gap-2.5">
+            <Mail size={16} className="text-accent" />
+            cashandcars.ae@gmail.com
+          </span>
+          <span className="flex items-center gap-2.5">
+            <Globe size={16} className="text-accent" />
+            www.cashandcars.ae
+          </span>
+          <span className="tnum flex items-center gap-2.5">
+            <Phone size={16} className="text-accent" />
+            +971 50 933 4067
+          </span>
+        </div>
+        <svg aria-hidden className="block h-[40px] w-full" viewBox="0 0 794 40" preserveAspectRatio="none">
+          <rect width="794" height="40" fill={CASHCARS_CHARCOAL} />
+        </svg>
+        <svg
+          aria-hidden
+          className="absolute bottom-[39px] right-0 h-[52px] w-[290px]"
+          viewBox="0 0 290 52"
+          preserveAspectRatio="none"
+        >
+          <path d="M0 52 C 30 52 34 0 72 0 H 290 V 52 Z" fill={CASHCARS_CHARCOAL} />
+        </svg>
       </div>
     </DocPage>
   )

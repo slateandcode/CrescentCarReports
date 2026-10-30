@@ -40,9 +40,12 @@ export const GALLERY_FIRST_MM = SECTION_CONT_MM
 export const GALLERY_CONT_MM = SECTION_CONT_MM
 
 /**
- * Alpha Worldwide's running header is a taller band than Crescent's — their
- * lockup is a stacked chevron-over-wordmark that is unreadable squeezed into
- * 16mm, so the brand band is ~30mm (measured off the artwork they supplied).
+ * The reseller brands' running headers are a taller band than Crescent's.
+ * Alpha Worldwide's lockup is a stacked chevron-over-wordmark that is
+ * unreadable squeezed into 16mm, so their band is ~30mm (measured off the
+ * artwork they supplied). Cash & Cars' swoosh-over-wordmark logo has the same
+ * problem and deliberately reuses the exact same band height, so one budget
+ * covers both.
  *
  * That height comes straight out of every page's content budget, which is why
  * it is a pagination constant and not just a CSS number: the sheet is a FIXED
@@ -55,11 +58,11 @@ export const GALLERY_CONT_MM = SECTION_CONT_MM
  * meant to sit under reality, where the cost of erring is a lightly-filled
  * extra page rather than clipped content.
  */
-export const ALPHA_HEADER_EXTRA_MM = 14
+export const BRAND_HEADER_EXTRA_MM = 14
 
 /** Extra header height this brand's band eats from each page's content budget. */
 export function headerExtraMm(brand: ReportBrand): number {
-  return brand === 'alpha' ? ALPHA_HEADER_EXTRA_MM : 0
+  return brand === 'crescent' ? 0 : BRAND_HEADER_EXTRA_MM
 }
 
 /** A "Checks passed" list reopens its bordered header each page it appears on. */

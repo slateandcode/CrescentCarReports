@@ -55,6 +55,16 @@ export const BRANDS: Record<ReportBrand, BrandConfig> = {
     scoreName: 'Overall Score',
     disclaimerPage: false,
   },
+  cashandcars: {
+    id: 'cashandcars',
+    name: 'Cash & Cars',
+    // Same reasoning as Alpha: their customer has never heard of Crescent.
+    scoreName: 'Overall Score',
+    // Built "the same way as Alpha", so the same call on the legal page: the
+    // disclaimer text names the inspection provider, and their legal position
+    // is theirs to state.
+    disclaimerPage: false,
+  },
 }
 
 /**
@@ -68,7 +78,7 @@ export const BRANDS: Record<ReportBrand, BrandConfig> = {
  */
 export function reportBrand(report: Pick<InspectionReport, 'report_brand'>): ReportBrand {
   const value = report.report_brand
-  return value === 'alpha' ? 'alpha' : 'crescent'
+  return VALID_BRANDS.includes(value) ? value : 'crescent'
 }
 
 export function brandConfig(report: Pick<InspectionReport, 'report_brand'>): BrandConfig {
@@ -88,4 +98,4 @@ export function effectiveBrand(
   return report.hide_branding ? 'crescent' : reportBrand(report)
 }
 
-export const VALID_BRANDS: ReportBrand[] = ['crescent', 'alpha']
+export const VALID_BRANDS: ReportBrand[] = ['crescent', 'alpha', 'cashandcars']

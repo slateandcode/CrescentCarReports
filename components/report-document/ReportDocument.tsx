@@ -4,6 +4,7 @@ import { brandConfig, effectiveBrand } from '@/lib/report-brand'
 import {
   ReportCoverPage,
   ReportAlphaCoverPage,
+  ReportCashCarsCoverPage,
   ReportVehicleSummaryPage,
   ReportExecutiveSummaryPage,
   ReportAccidentHistoryPage,
@@ -79,8 +80,9 @@ export function ReportDocument({
     )
   if (showFinalNotes)
     pages.push(<ReportFinalNotesPage key="notes" report={report} template={template} index={next()} />)
-  // Alpha asked for the legal disclaimer dropped: the text names the inspection
-  // provider throughout and their legal position is theirs to state.
+  // Alpha asked for the legal disclaimer dropped (Cash & Cars follows suit): the
+  // text names the inspection provider throughout and their legal position is
+  // theirs to state.
   if (disclaimerPage) pages.push(<ReportDisclaimerPage key="disclaimer" report={report} index={next()} />)
 
   return (
@@ -95,10 +97,12 @@ export function ReportDocument({
     // brand/white-label variant.
     <div
       data-report-document=""
-      className={`report-doc bg-[#3A3A3A] print:bg-white${report.hide_branding ? ' report-doc--unbranded' : ''}${brand === 'alpha' ? ' report-doc--alpha' : ''}`}
+      className={`report-doc bg-[#3A3A3A] print:bg-white${report.hide_branding ? ' report-doc--unbranded' : ''}${brand !== 'crescent' ? ` report-doc--${brand}` : ''}`}
     >
       {brand === 'alpha' ? (
         <ReportAlphaCoverPage />
+      ) : brand === 'cashandcars' ? (
+        <ReportCashCarsCoverPage />
       ) : (
         <ReportCoverPage report={report} template={template} />
       )}

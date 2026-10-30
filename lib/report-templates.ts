@@ -421,6 +421,19 @@ export const REPORT_OPTIONS: ReportOption[] = [
       'The Premium inspection, delivered as an Alpha Worldwide branded report.',
     ctaLabel: 'Start Alpha Report',
   },
+  {
+    // Built the same way as Alpha: Premium's scope verbatim, Cash & Cars'
+    // identity on the document.
+    ...PACKAGES.premium,
+    key: 'cashandcars',
+    packageType: 'premium',
+    brand: 'cashandcars',
+    name: 'Cash & Cars',
+    popular: false,
+    description:
+      'The Premium inspection, delivered as a Cash & Cars branded report.',
+    ctaLabel: 'Start Cash & Cars Report',
+  },
 ]
 
 /** Items in a section visible at the given package tier. */

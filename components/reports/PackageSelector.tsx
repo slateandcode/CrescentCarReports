@@ -8,8 +8,8 @@ import { Spinner } from '@/components/ui/Spinner'
 import { cn } from '@/lib/utils'
 
 export function PackageSelector() {
-  // Keyed on the option key, not the package: Premium and Alpha are both the
-  // 'premium' package, and a shared key would spin both buttons at once.
+  // Keyed on the option key, not the package: Premium, Alpha and Cash & Cars
+  // are all the 'premium' package, and a shared key would spin them at once.
   const [pending, setPending] = useState<string | null>(null)
 
   async function choose(option: (typeof REPORT_OPTIONS)[number]) {
@@ -23,7 +23,7 @@ export function PackageSelector() {
   }
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       {REPORT_OPTIONS.map((pkg) => (
         <div
           key={pkg.key}

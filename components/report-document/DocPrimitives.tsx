@@ -73,6 +73,13 @@ export function DocPage({
           <DocImg src="/alpha-mark.png" className="object-contain" />
         </span>
       )}
+      {/* Their letterhead ghosts the whole logo, so the watermark is the full
+          lockup rather than a mark; box carries the asset's 1400 × 482 aspect. */}
+      {watermark && (
+        <span className="cashandcars-only pointer-events-none absolute bottom-10 -right-10 block h-[114px] w-[330px] opacity-[0.06]">
+          <DocImg src="/cash-and-cars.png" className="object-contain" />
+        </span>
+      )}
       {children}
     </div>
   )
@@ -92,14 +99,15 @@ function Wordmark({ className }: { className?: string }) {
  *
  * This component never receives the report — it is called from a dozen page
  * components that only know their own label — so which variant shows rides on
- * CSS classes set by the document root (see globals.css): `not-alpha` for the
- * near-black Crescent bar (which also serves white-label, with the wordmark
- * swapped for a neutral title), `alpha-only` for the Alpha Worldwide bar.
+ * CSS classes set by the document root (see globals.css): `default-chrome` for
+ * the near-black Crescent bar (which also serves white-label, with the wordmark
+ * swapped for a neutral title), `alpha-only` for the Alpha Worldwide bar and
+ * `cashandcars-only` for the Cash & Cars bar.
  *
- * The two variants are NOT the same height: Alpha's stacked chevron-over-
- * wordmark lockup is illegible squeezed into Crescent's 16mm band, so their
- * band is ~30mm, per the artwork. That difference is paid for in the pagination
- * budget (ALPHA_HEADER_EXTRA_MM in lib/report-paginate.ts) — the sheet is a
+ * The variants are NOT the same height: the resellers' stacked logos are
+ * illegible squeezed into Crescent's 16mm band, so their bands are ~30mm, per
+ * the artwork. That difference is paid for in the pagination budget
+ * (BRAND_HEADER_EXTRA_MM in lib/report-paginate.ts) — the sheet is a
  * fixed 297mm that clips, so the content budget has to shrink by exactly what
  * the header grows, or dense pages shear instead of flowing to a
  * "(continued)" page.
@@ -107,7 +115,7 @@ function Wordmark({ className }: { className?: string }) {
 export function DocHeader({ label }: { label: string }) {
   return (
     <>
-      <div className="not-alpha bg-doc-ink">
+      <div className="default-chrome bg-doc-ink">
         <div className="flex items-center justify-between px-12 pb-4 pt-5">
           <Wordmark className="brand-only h-[26px] w-[132px]" />
           <span className="unbranded-only text-[11px] font-bold uppercase tracking-[0.3em] text-white/85">
@@ -122,6 +130,7 @@ export function DocHeader({ label }: { label: string }) {
       </div>
 
       <AlphaHeader label={label} />
+      <CashCarsHeader label={label} />
     </>
   )
 }
@@ -180,6 +189,48 @@ function AlphaHeader({ label }: { label: string }) {
 /** Alpha Worldwide dark navy — the steady half of their two-blue palette. */
 export const ALPHA_NAVY = '#103659'
 
+/** Cash & Cars charcoal — the footer band of their letterhead, sampled. */
+export const CASHCARS_CHARCOAL = '#1c201f'
+
+/**
+ * Cash & Cars running header, built from their letterhead: the logo on white,
+ * and the page label riding a charcoal panel whose left edge sweeps in on the
+ * same curve as the band along the letterhead's foot.
+ *
+ * Same band height and `-mb-3` overlap as AlphaHeader, so it is paid for by
+ * the same BRAND_HEADER_EXTRA_MM pagination budget. The logo box keeps Alpha's
+ * 82px height (which is what sets the band) but is width-bound, so the wide
+ * 1400 × 482 logo draws ~72px tall, centred in it.
+ */
+function CashCarsHeader({ label }: { label: string }) {
+  return (
+    <div className="cashandcars-only -mb-3">
+      <div className="relative flex items-center justify-between overflow-hidden bg-white px-12 pb-[14px] pt-[16px]">
+        <span className="relative block h-[82px] w-[210px]">
+          <DocImg src="/cash-and-cars.png" alt="Cash & Cars" className="object-contain object-left" />
+        </span>
+        <svg
+          aria-hidden
+          className="absolute inset-y-0 right-0 h-full w-[300px]"
+          viewBox="0 0 300 116"
+          preserveAspectRatio="none"
+        >
+          <path d="M0 116 C 34 116 38 0 78 0 H 300 V 116 Z" fill={CASHCARS_CHARCOAL} />
+        </svg>
+        <span className="relative flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.28em] text-white">
+          {label}
+          <span className="h-1 w-1 rounded-full bg-accent" />
+        </span>
+      </div>
+      {/* Red under the logo, running into the charcoal of the panel above. */}
+      <div
+        className="h-[4px] w-full"
+        style={{ background: `linear-gradient(90deg, rgb(var(--accent-rgb)) 0%, rgb(var(--accent-rgb)) 55%, ${CASHCARS_CHARCOAL} 85%)` }}
+      />
+    </div>
+  )
+}
+
 /** Page footer. The brand line swaps by CSS class — same reasoning as DocHeader. */
 export function DocFooter({ reference, note }: { reference: string; note?: string }) {
   return (
@@ -196,15 +247,23 @@ export function DocFooter({ reference, note }: { reference: string; note?: strin
           https://alphaworldwide.me/
         </span>
       </span>
-      {/* Crescent prints the page name and the report reference. Alpha drops the
-          reference: "CCR" is Crescent Car Reports, so the code is brand leakage
-          on their document however neutral the rest of the page is. The report
-          is still identified by the Reference row on the Vehicle Summary page. */}
-      <span className="not-alpha tnum font-mono text-doc-ink/70">
+      <span className="cashandcars-only">
+        <span className="inline-flex items-center gap-1.5 whitespace-nowrap normal-case tracking-normal text-doc-ink/70">
+          <Globe size={11} className="text-accent" />
+          www.cashandcars.ae
+        </span>
+      </span>
+      {/* Crescent prints the page name and the report reference. The resellers
+          drop the reference: "CCR" is Crescent Car Reports, so the code is brand
+          leakage on their document however neutral the rest of the page is. The
+          report is still identified by the Reference row on the Vehicle Summary
+          page. */}
+      <span className="default-chrome tnum font-mono text-doc-ink/70">
         {note ? `${note} · ` : ''}
         {reference}
       </span>
       <span className="alpha-only text-doc-ink/70">{note}</span>
+      <span className="cashandcars-only text-doc-ink/70">{note}</span>
     </div>
   )
 }

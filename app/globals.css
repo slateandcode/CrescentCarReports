@@ -202,8 +202,8 @@
 
 /* ── Alpha Worldwide brand (report.report_brand, migration 022) ──────────
    Same mechanism as white-label above, one axis over: `alpha-only` chrome
-   appears and `not-alpha` chrome (the near-black Crescent header bar) goes
-   away. `brand-only` — which marks Crescent-specific imagery such as the page
+   appears and `default-chrome` (the near-black Crescent header bar, which also
+   serves white-label) goes away. `brand-only` — which marks Crescent-specific imagery such as the page
    watermark — is hidden here too, because "branded" in that class means
    Crescent, not "has a brand".
 
@@ -218,12 +218,29 @@
 .report-doc--alpha .alpha-only {
   display: revert;
 }
-.report-doc--alpha .not-alpha,
+.report-doc--alpha .default-chrome,
 .report-doc--alpha .brand-only {
   display: none !important;
 }
 .report-doc--alpha {
   --accent-rgb: 34 165 219; /* #22a5db — Alpha light blue */
+}
+
+/* ── Cash & Cars brand (report.report_brand, migration 041) ──────────────
+   Exactly the Alpha mechanism with its own class pair. The accent is the red
+   of their logo swoosh, sampled off the letterhead they supplied. */
+.report-doc .cashandcars-only {
+  display: none;
+}
+.report-doc--cashandcars .cashandcars-only {
+  display: revert;
+}
+.report-doc--cashandcars .default-chrome,
+.report-doc--cashandcars .brand-only {
+  display: none !important;
+}
+.report-doc--cashandcars {
+  --accent-rgb: 221 47 38; /* #dd2f26 — Cash & Cars red */
 }
 
 @media screen {
