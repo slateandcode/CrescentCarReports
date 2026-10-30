@@ -201,26 +201,34 @@ export const CASHCARS_CHARCOAL = '#1c201f'
  * the same BRAND_HEADER_EXTRA_MM pagination budget. The logo box keeps Alpha's
  * 82px height (which is what sets the band) but is width-bound, so the wide
  * 1400 × 482 logo draws ~72px tall, centred in it.
+ *
+ * The panel is sized by its label, not fixed: section titles run up to
+ * "Exterior, Paint, Panel Alignment & Chassis", and a fixed panel let the
+ * white text run off its curve onto the white band. The curve is its own
+ * fixed-width piece; the flat part grows (from a 222px floor, so short labels
+ * keep the original 300px panel) and the label wraps to two lines past 300px.
  */
 function CashCarsHeader({ label }: { label: string }) {
   return (
     <div className="cashandcars-only -mb-3">
-      <div className="relative flex items-center justify-between overflow-hidden bg-white px-12 pb-[14px] pt-[16px]">
+      <div className="relative flex items-center overflow-hidden bg-white px-12 pb-[14px] pt-[16px]">
         <span className="relative block h-[82px] w-[210px]">
           <DocImg src="/cash-and-cars.png" alt="Cash & Cars" className="object-contain object-left" />
         </span>
-        <svg
-          aria-hidden
-          className="absolute inset-y-0 right-0 h-full w-[300px]"
-          viewBox="0 0 300 116"
-          preserveAspectRatio="none"
-        >
-          <path d="M0 116 C 34 116 38 0 78 0 H 300 V 116 Z" fill={CASHCARS_CHARCOAL} />
-        </svg>
-        <span className="relative flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.28em] text-white">
-          {label}
-          <span className="h-1 w-1 rounded-full bg-accent" />
-        </span>
+        <div className="absolute inset-y-0 right-0 flex">
+          <svg aria-hidden className="-mr-px h-full w-[78px] shrink-0" viewBox="0 0 78 116" preserveAspectRatio="none">
+            <path d="M0 116 C 34 116 38 0 78 0 V 116 Z" fill={CASHCARS_CHARCOAL} />
+          </svg>
+          <div
+            className="flex min-w-[222px] items-center justify-end gap-2 pl-3 pr-12"
+            style={{ background: CASHCARS_CHARCOAL }}
+          >
+            <span className="max-w-[300px] text-right text-[10px] font-bold uppercase leading-[1.7] tracking-[0.28em] text-white">
+              {label}
+            </span>
+            <span className="h-1 w-1 shrink-0 rounded-full bg-accent" />
+          </div>
+        </div>
       </div>
       {/* Red under the logo, running into the charcoal of the panel above. */}
       <div
